@@ -1,0 +1,17 @@
+{
+  "_source": "第15巻未受領のため【AI提案・要差替】(GDDは実績65種)。ここでは代表12種を定義。id/cond/hiddenで管理。",
+  "list": [
+    {"id":"first_blood","name":"はじめての勝利","cond":{"battles_won":1},"hidden":false},
+    {"id":"survivor_30","name":"1ヶ月生存","cond":{"survived_day":30},"hidden":false},
+    {"id":"survivor_100","name":"100日生存","cond":{"survived_day":100},"hidden":false},
+    {"id":"survivor_365","name":"1年生存","cond":{"survived_day":365},"hidden":false},
+    {"id":"chef","name":"島の料理人","cond":{"cooked":20},"hidden":false},
+    {"id":"blacksmith","name":"島の鍛冶師","cond":{"built":10},"hidden":false},
+    {"id":"pharmacist","name":"島の薬師","cond":{"brewed":10},"hidden":false},
+    {"id":"reviver","name":"祠の奇跡","cond":{"revived":1},"hidden":false},
+    {"id":"protector","name":"盾となりて","cond":{"protect_success":10},"hidden":false},
+    {"id":"bonded","name":"深き絆","cond":{"trust_avg_min":80},"hidden":false},
+    {"id":"true_end","name":"希望の種","cond":{"ending":"TRUE"},"hidden":true},
+    {"id":"goddess_met","name":"湖の女神","cond":{"flag":"goddess_joined"},"hidden":true}
+  ]
+}

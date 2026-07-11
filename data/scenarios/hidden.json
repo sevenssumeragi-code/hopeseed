@@ -1,0 +1,14 @@
+{
+  "_source": "第11巻(隠し)未受領のため【AI提案・要差替】。",
+  "events": [
+    {
+      "id": "hidden_goddess",
+      "trigger": {"day_min": 60, "location": "shrine_islet", "flags_all": []},
+      "requires_alive": [],
+      "variants": [
+        {"key":"A","cond":"trust_avg_holder>=50","text":"祠の奥で湖の女神が微笑む。『あなたたちの絆、確かに見届けました』——女神が仲間に加わった！"}
+      ],
+      "sets_flags": ["goddess_joined"]
+    }
+  ]
+}

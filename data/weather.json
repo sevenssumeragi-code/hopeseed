@@ -1,0 +1,10 @@
+{
+  "_source": "第14巻18-9未受領のため【AI提案・要差替】。朝決定(MorningTick)で当日の天候を抽選する。",
+  "types": {
+    "clear":  {"name":"晴れ","weight":50,"effects":{}},
+    "cloudy": {"name":"曇り","weight":25,"effects":{}},
+    "rain":   {"name":"雨","weight":15,"effects":{"infection_risk":0.1,"encounter_mult":0.9}},
+    "storm":  {"name":"嵐","weight":7,"effects":{"infection_risk":0.15,"encounter_mult":0.7,"no_sea":true}},
+    "fog":    {"name":"霧","weight":3,"effects":{"encounter_mult":1.2,"hit_penalty":10}}
+  }
+}

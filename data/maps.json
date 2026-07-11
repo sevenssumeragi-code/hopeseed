@@ -1,0 +1,72 @@
+{
+  "_source": "第3巻未受領のため地形詳細は【AI提案・要差替】。エリア構成は第0巻0-2/0-4(荒野の配置・砂漠→砂浜の解釈)に忠実。connectionsは移動グラフ。",
+
+  "base": {
+    "name": "湖畔の拠点", "area_type": "base", "size": [20, 20],
+    "encounter_rate": 0.0, "enemies": [], "gather": [],
+    "connections": ["forest_lake", "grassland"],
+    "is_base": true
+  },
+  "forest_lake": {
+    "name": "森と湖", "area_type": "field", "size": [24, 24],
+    "encounter_rate": 0.18, "enemies": ["wild_boar", "man_eater_flower", "swarm_mosquito"],
+    "gather": [{"item":"herb_leaf","rate":0.5},{"item":"fish","rate":0.3}],
+    "connections": ["base", "grassland", "shallows"]
+  },
+  "grassland": {
+    "name": "草原", "area_type": "field", "size": [28, 28],
+    "encounter_rate": 0.16, "enemies": ["wild_boar", "swarm_mosquito"],
+    "night_enemies": ["lesser_demon"],
+    "gather": [{"item":"herb_leaf","rate":0.4},{"item":"raw_meat","rate":0.3}],
+    "connections": ["base", "forest_lake", "wasteland", "beach"]
+  },
+  "wasteland": {
+    "name": "荒野", "area_type": "field", "size": [26, 26],
+    "encounter_rate": 0.20, "enemies": ["lava_slime", "wild_boar", "swarm_mosquito"],
+    "night_enemies": ["lesser_demon"],
+    "gather": [{"item":"fire_stone","rate":0.35},{"item":"iron_scrap","rate":0.25}],
+    "connections": ["grassland", "volcano"]
+  },
+  "volcano": {
+    "name": "火山・登山道", "area_type": "field", "size": [22, 30],
+    "encounter_rate": 0.22, "enemies": ["lava_slime"],
+    "gather": [{"item":"fire_stone","rate":0.5}],
+    "connections": ["wasteland"],
+    "has_shrine": "fire"
+  },
+  "beach": {
+    "name": "砂浜", "area_type": "field", "size": [30, 18],
+    "encounter_rate": 0.14, "enemies": ["pirate_thug", "swarm_mosquito"],
+    "night_enemies": ["lesser_demon"],
+    "gather": [{"item":"fish","rate":0.4},{"item":"iron_scrap","rate":0.2}],
+    "connections": ["grassland", "shallows", "pirate_ship"]
+  },
+  "shallows": {
+    "name": "浅瀬の海", "area_type": "field", "size": [26, 20],
+    "encounter_rate": 0.20, "enemies": ["shark"],
+    "gather": [{"item":"fish","rate":0.6},{"item":"caviar","rate":0.1}],
+    "connections": ["forest_lake", "beach", "shrine_islet"],
+    "tidal": true
+  },
+  "shrine_islet": {
+    "name": "海の祠の孤島", "area_type": "field", "size": [16, 16],
+    "encounter_rate": 0.15, "enemies": ["shark"],
+    "gather": [{"item":"caviar","rate":0.2}],
+    "connections": ["shallows"],
+    "has_shrine": "water"
+  },
+  "pirate_ship": {
+    "name": "海賊船", "area_type": "dungeon", "size": [14, 40],
+    "encounter_rate": 0.25, "enemies": ["pirate_thug"],
+    "gather": [{"item":"iron_scrap","rate":0.3}],
+    "connections": ["beach"],
+    "boss": "pirate_captain"
+  },
+  "dream": {
+    "name": "夢の中", "area_type": "dream", "size": [20, 20],
+    "encounter_rate": 0.30, "enemies": ["nightmare_wisp"],
+    "gather": [{"item":"dream_dust","rate":0.4}],
+    "connections": [],
+    "boss": "nightmare_king"
+  }
+}

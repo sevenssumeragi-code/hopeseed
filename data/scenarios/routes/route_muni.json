@@ -1,0 +1,27 @@
+{
+  "_source": "第10巻未受領のため【AI提案・要差替】。保持者muniルートの骨子イベント。",
+  "route_id": "route_muni",
+  "events": [
+    {
+      "id": "route_muni_intro",
+      "trigger": {"day_min": 1, "day_max": 1, "location": "base", "flags_all": ["route_muni"]},
+      "requires_alive": ["muni"],
+      "variants": [
+        {"key":"A","cond":"default","text":"漂着から目を覚ますと、湖畔にいた。手の中には淡く光る種——ホープシード。これを託されたのは自分らしい。365日、みなで生き延びよう。"}
+      ],
+      "sets_flags": ["route_muni_intro_done"],
+      "core": true
+    },
+    {
+      "id": "route_muni_mid",
+      "trigger": {"day_min": 120, "location": "base", "flags_all": ["route_muni"]},
+      "requires_alive": ["muni"],
+      "variants": [
+        {"key":"C","cond":"trust_avg_holder>=60","text":"半年が近い。仲間との絆は確かなものになった。ホープシードの光が、少し強くなった気がする。"},
+        {"key":"A","cond":"default","text":"半年が近い。まだ島の脅威は去らない。気を引き締めていこう。"}
+      ],
+      "sets_flags": ["route_muni_mid_done"],
+      "core": true
+    }
+  ]
+}

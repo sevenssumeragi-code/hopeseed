@@ -1,0 +1,12 @@
+{
+  "_source": "第11巻(掛け合い)未受領のため【AI提案・要差替】。ペアIDは英語ID昇順 renny_geru。",
+  "id": "talk_renny_geru_01",
+  "pair": "geru:renny",
+  "trigger": {"trust_min": 30, "location": "base"},
+  "requires_alive": ["renny", "geru"],
+  "variants": [
+    {"key":"A","cond":"default","text":"ゲル「よう、保持者どの。種は重いか？」\nレニィ「……重いよ。でも、僕が持つって決めたんだ」\nゲル「はっ、いい面構えだ。背中は預けとけ」"}
+  ],
+  "rewards": {"trust": [{"pair":"geru:renny","amount":3}]},
+  "sets_flags": ["talk_renny_geru_01_done"]
+}

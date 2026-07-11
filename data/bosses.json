@@ -1,0 +1,70 @@
+{
+  "_source": "GDD第0巻0-4 矛盾#12【AI提案】のボス5体。詳細数値は第8巻11章未受領のため【AI提案・要差替】。",
+
+  "pirate_captain": {
+    "name": "海賊船長", "family": "pirate", "boss": true,
+    "base": {"hp":320,"atk":26,"def":14,"spd":11,"skl":12,"eva":6},
+    "ai": "boss_pirate", "exp_base": 120,
+    "victory": "rescue_kidnapped_all",
+    "skills": [
+      {"name":"大回転斬り","accuracy":85,"power":2.0,"target":"all","effects":[]},
+      {"name":"号令","accuracy":100,"power":null,"effects":[{"type":"buff","stats":["atk"],"stage":1,"turns":3}]}
+    ],
+    "drops": [{"item":"captain_saber","rate":1.0}],
+    "location": "pirate_ship"
+  },
+
+  "demon_lord": {
+    "name": "悪魔の首魁", "family": "demon", "boss": true,
+    "base": {"hp":400,"atk":30,"def":16,"spd":13,"skl":14,"eva":8},
+    "ai": "boss_demon", "exp_base": 200,
+    "weakness": "anti_demon",
+    "victory": "hp_zero",
+    "skills": [
+      {"name":"闇の奔流","accuracy":85,"power":2.2,"target":"all","effects":[]},
+      {"name":"取り憑き","accuracy":50,"power":null,"target":"single","effects":[{"type":"possess"}]}
+    ],
+    "drops": [{"item":"demon_core","rate":1.0}],
+    "location": "wasteland"
+  },
+
+  "nightmare_king": {
+    "name": "夢魔の王", "family": "nightmare", "boss": true,
+    "base": {"hp":350,"atk":24,"def":12,"spd":15,"skl":16,"eva":12},
+    "ai": "boss_nightmare", "exp_base": 160,
+    "victory": "hp_zero",
+    "skills": [
+      {"name":"深き悪夢","accuracy":75,"power":1.8,"target":"all","effects":[{"type":"paralysis","chance":0.30}]},
+      {"name":"眠りの呪い","accuracy":60,"power":null,"effects":[{"type":"coma_battle"}]}
+    ],
+    "drops": [{"item":"dream_crown","rate":1.0}],
+    "location": "dream"
+  },
+
+  "volcano_lord": {
+    "name": "火山の主", "family": "fire_monster", "boss": true,
+    "base": {"hp":500,"atk":32,"def":20,"spd":9,"skl":11,"eva":4},
+    "ai": "boss_volcano", "exp_base": 240,
+    "victory": "hp_zero",
+    "skills": [
+      {"name":"噴火","accuracy":90,"power":2.5,"target":"all","effects":[{"type":"burn","chance":0.40}]},
+      {"name":"溶岩の壁","accuracy":100,"power":null,"effects":[{"type":"buff","stats":["def"],"stage":2,"turns":3}]}
+    ],
+    "drops": [{"item":"magma_heart","rate":1.0}],
+    "location": "volcano"
+  },
+
+  "deep_sea_nushi": {
+    "name": "深海の巨大魚ヌシ", "family": "giant_fish", "boss": true,
+    "base": {"hp":600,"atk":34,"def":18,"spd":16,"skl":13,"eva":10},
+    "ai": "boss_nushi", "exp_base": 300,
+    "victory": "hp_zero",
+    "tide_exempt": true,
+    "skills": [
+      {"name":"大津波","accuracy":85,"power":2.6,"target":"all","effects":[]},
+      {"name":"丸呑み","accuracy":45,"power":null,"effects":[{"type":"instant_death"}]}
+    ],
+    "drops": [{"item":"nushi_scale","rate":1.0}],
+    "location": "shrine_islet"
+  }
+}

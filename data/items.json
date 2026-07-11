@@ -1,0 +1,38 @@
+{
+  "_source": "第7巻8章未受領のため【AI提案・要差替】。category=food_material/food/weapon_material/weapon/herb/medicine/key_item/treasure。tribute判定はfamily(meat/fish)で行う(第0巻0-5)。",
+
+  "raw_meat": {"name":"生肉","category":"food_material","family":"meat","desc":"動物の肉。炎の女神への供物になる"},
+  "fish": {"name":"魚","category":"food_material","family":"fish","desc":"新鮮な魚。水の女神への供物になる"},
+  "caviar": {"name":"キャビア","category":"food_material","family":"fish","desc":"高級な魚卵"},
+  "herb_leaf": {"name":"薬草の葉","category":"herb","desc":"薬の材料"},
+  "toxic_pollen": {"name":"毒の花粉","category":"herb","desc":"薬にも毒にもなる"},
+  "fire_stone": {"name":"火打石","category":"weapon_material","desc":"武器の強化素材"},
+  "iron_scrap": {"name":"鉄くず","category":"weapon_material","desc":"武器の材料"},
+  "dark_shard": {"name":"闇の欠片","category":"weapon_material","desc":"悪魔の残滓"},
+  "dream_dust": {"name":"夢の砂","category":"weapon_material","desc":"夢魔が残す砂"},
+
+  "grilled_meat": {"name":"焼き肉","category":"food","hunger_restore":40,"hp_restore":20,"sp_restore":6,"desc":"焼いた肉。空腹とHPを回復"},
+  "grilled_fish": {"name":"焼き魚","category":"food","hunger_restore":35,"hp_restore":15,"sp_restore":8,"desc":"焼いた魚。空腹とHP/SPを回復"},
+  "herb_soup": {"name":"薬草スープ","category":"food","hunger_restore":30,"hp_restore":30,"sp_restore":10,"desc":"薬草入りの滋養スープ"},
+
+  "antidote": {"name":"解毒薬","category":"medicine","cure":["poison"],"desc":"毒を治す"},
+  "styptic": {"name":"止血薬","category":"medicine","cure":["bleed"],"desc":"大出血を止める"},
+  "fever_cure": {"name":"疫病薬","category":"medicine","cure":["plague"],"desc":"疫病を治す"},
+  "cure_all": {"name":"万能薬","category":"medicine","cure":["poison","bleed","plague","paralysis"],"desc":"あらゆる状態異常を治す"},
+  "potion": {"name":"回復薬","category":"medicine","hp_restore":50,"desc":"HPを50回復"},
+  "revive_dew": {"name":"女神の雫","category":"medicine","revive":true,"desc":"戦闘不能を回復する"},
+
+  "captain_saber": {"name":"船長のサーベル","category":"weapon","weapon_type":"sword","atk_bonus":8,"desc":"海賊船長の得物"},
+  "captain_saber_ref": {"name":"—","category":"treasure","desc":"予約"},
+  "demon_core": {"name":"悪魔の核","category":"key_item","desc":"悪魔の首魁が遺した核"},
+  "dream_crown": {"name":"夢魔の王冠","category":"treasure","desc":"夢魔の王の証"},
+  "magma_heart": {"name":"マグマの心臓","category":"treasure","desc":"火山の主の核"},
+  "nushi_scale": {"name":"ヌシの鱗","category":"treasure","desc":"深海のヌシの巨大な鱗"},
+
+  "iron_sword": {"name":"鉄の剣","category":"weapon","weapon_type":"sword","atk_bonus":5,"desc":"よく斬れる鉄の剣"},
+  "iron_dagger": {"name":"鉄の短剣","category":"weapon","weapon_type":"dagger","atk_bonus":4,"desc":"素早い短剣"},
+  "iron_axe": {"name":"鉄の斧","category":"weapon","weapon_type":"axe","atk_bonus":6,"desc":"重い鉄の斧"},
+  "iron_spear": {"name":"鉄の槍","category":"weapon","weapon_type":"spear","atk_bonus":5,"desc":"間合いの長い槍"},
+
+  "hopeseed": {"name":"ホープシード","category":"key_item","desc":"希望の種。保持者が生きる限り仲間は蘇る"}
+}

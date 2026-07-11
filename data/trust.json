@@ -1,0 +1,29 @@
+{
+  "_source": "第9巻未受領のため初期値・増減は【AI提案・要差替】。ペアキーは英語ID昇順で 'a:b' 正規化(第16巻20-9命名規約)。muni保持者×1.5は第16巻20-8で確定。",
+  "initial_default": 10,
+  "initial_pairs": {
+    "geru:renny": 20,
+    "muni:renny": 15,
+    "neo:renny": 15,
+    "hyu:jinpachi": 20
+  },
+  "gain": {
+    "battle_together": 1,
+    "protect_success": 5,
+    "share_meal": 2,
+    "talk_event": 3,
+    "revive": 4,
+    "gift": 3
+  },
+  "loss": {
+    "member_death": -5,
+    "left_downed": -2
+  },
+  "pairs": [
+    "renny:hyu","renny:jinpachi","renny:muni","renny:geru","renny:neo",
+    "hyu:jinpachi","hyu:muni","hyu:geru","hyu:neo",
+    "jinpachi:muni","jinpachi:geru","jinpachi:neo",
+    "muni:geru","muni:neo",
+    "geru:neo","goddess:renny"
+  ]
+}

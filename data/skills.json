@@ -1,0 +1,52 @@
+{
+  "_source": "renny_08/geru_15=GDD第16巻20-3-2(正本). 他は第6巻未受領のため【AI提案・要差替】。effects.typeは第16巻20-3-2の列挙に準拠。kind=physical/magic/support。",
+
+  "renny_01": {"name":"斬撃","owner":"renny","learn_lv":1,"kind":"physical","target":"enemy_single","accuracy":95,"power":1.0,"hits":1,"sp_cost":3,"effects":[],"desc":"基本の剣撃"},
+  "renny_02": {"name":"二段斬り","owner":"renny","learn_lv":6,"kind":"physical","target":"enemy_single","accuracy":90,"power":1.4,"hits":2,"sp_cost":7,"effects":[],"desc":"素早い二連撃"},
+  "renny_03": {"name":"激流の型","owner":"renny","learn_lv":16,"kind":"support","target":"self","accuracy":100,"power":null,"sp_cost":8,"effects":[{"type":"buff","stats":["spd","skl"],"stage":1,"turns":3}],"desc":"水の呼吸で速さと技を高める"},
+  "renny_08": {"name":"激流斬","owner":"renny","learn_lv":24,"kind":"physical","target":"enemy_single","accuracy":90,"power":2.5,"hits":1,"sp_cost":13,"effects":[{"type":"bleed","chance":0.20}],"desc":"激流のごとき鋭い斬撃で深手を負わせる"},
+  "renny_10": {"name":"獅子奮迅","owner":"renny","learn_lv":45,"kind":"physical","target":"enemy_single","accuracy":90,"power":3.0,"hits":1,"sp_cost":16,"effects":[],"desc":"覚醒せし獅子の一撃"},
+  "renny_15": {"name":"覚醒・大激流","owner":"renny","learn_lv":60,"kind":"physical","target":"enemy_all","accuracy":90,"power":2.2,"hits":1,"sp_cost":22,"effects":[{"type":"bleed","chance":0.25}],"desc":"島の水脈を呼び覚ます奥義"},
+
+  "hyu_01": {"name":"刺突","owner":"hyu","learn_lv":1,"kind":"physical","target":"enemy_single","accuracy":95,"power":1.0,"hits":1,"sp_cost":3,"effects":[],"desc":"短剣の刺突"},
+  "hyu_02": {"name":"影走り","owner":"hyu","learn_lv":6,"kind":"physical","target":"enemy_single","accuracy":90,"power":1.3,"hits":1,"sp_cost":6,"effects":[{"type":"crit_bonus","amount":10.0}],"desc":"影に紛れ急所を狙う"},
+  "hyu_03": {"name":"目つぶし","owner":"hyu","learn_lv":16,"kind":"support","target":"enemy_single","accuracy":90,"power":null,"sp_cost":8,"effects":[{"type":"debuff","stats":["eva","skl"],"stage":1,"turns":3}],"desc":"相手の目をくらませる"},
+  "hyu_08": {"name":"宵闇の刃","owner":"hyu","learn_lv":26,"kind":"physical","target":"enemy_single","accuracy":90,"power":2.0,"hits":1,"sp_cost":12,"effects":[{"type":"night_bonus","mult":1.3}],"desc":"夜にこそ冴える一刺し"},
+  "hyu_10": {"name":"月影乱舞","owner":"hyu","learn_lv":46,"kind":"physical","target":"enemy_all","accuracy":85,"power":1.8,"hits":1,"sp_cost":16,"effects":[],"desc":"月光の下、無数の斬撃が舞う"},
+  "hyu_15": {"name":"真夜中の宴","owner":"hyu","learn_lv":60,"kind":"physical","target":"enemy_single","accuracy":95,"power":3.2,"hits":1,"sp_cost":20,"effects":[{"type":"night_bonus","mult":1.3}],"desc":"闇の頂点で放つ必殺"},
+
+  "jinpachi_01": {"name":"打ち下ろし","owner":"jinpachi","learn_lv":1,"kind":"physical","target":"enemy_single","accuracy":90,"power":1.2,"hits":1,"sp_cost":4,"effects":[],"desc":"斧の重い一撃"},
+  "jinpachi_02": {"name":"火の粉","owner":"jinpachi","learn_lv":8,"kind":"physical","target":"enemy_single","accuracy":90,"power":1.3,"hits":1,"sp_cost":7,"effects":[{"type":"burn","chance":0.30}],"desc":"火花を散らして焼く"},
+  "jinpachi_03": {"name":"仁王立ち","owner":"jinpachi","learn_lv":16,"kind":"support","target":"self","accuracy":100,"power":null,"sp_cost":8,"effects":[{"type":"buff","stats":["def"],"stage":2,"turns":3}],"desc":"どっしり構え防御を固める"},
+  "jinpachi_08": {"name":"灼熱斧","owner":"jinpachi","learn_lv":28,"kind":"physical","target":"enemy_single","accuracy":85,"power":2.4,"hits":1,"sp_cost":14,"effects":[{"type":"burn","chance":0.40}],"desc":"炎をまとう斧撃"},
+  "jinpachi_10": {"name":"大地割り","owner":"jinpachi","learn_lv":48,"kind":"physical","target":"enemy_all","accuracy":80,"power":2.0,"hits":1,"sp_cost":18,"effects":[],"desc":"大地を割る全体攻撃"},
+  "jinpachi_15": {"name":"噴火撃","owner":"jinpachi","learn_lv":60,"kind":"physical","target":"enemy_single","accuracy":85,"power":3.5,"hits":1,"sp_cost":24,"effects":[{"type":"burn","chance":0.50}],"desc":"火山の怒りを込めた一撃"},
+
+  "muni_01": {"name":"杖打ち","owner":"muni","learn_lv":1,"kind":"physical","target":"enemy_single","accuracy":90,"power":0.9,"hits":1,"sp_cost":3,"effects":[],"desc":"杖で打つ"},
+  "muni_02": {"name":"癒しの調べ","owner":"muni","learn_lv":6,"kind":"support","target":"ally_single","accuracy":100,"power":null,"sp_cost":8,"effects":[{"type":"heal","ratio":0.30}],"desc":"優しい調べが傷を癒す"},
+  "muni_03": {"name":"眠りの唄","owner":"muni","learn_lv":16,"kind":"support","target":"enemy_single","accuracy":80,"power":null,"sp_cost":10,"effects":[{"type":"paralysis","chance":0.50}],"desc":"眠気を誘う唄で相手を止める"},
+  "muni_08": {"name":"応援歌","owner":"muni","learn_lv":30,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":14,"effects":[{"type":"buff","stats":["atk"],"stage":1,"turns":3}],"desc":"仲間を鼓舞する歌"},
+  "muni_12": {"name":"勇気の歌","owner":"muni","learn_lv":48,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":16,"song_id":"brave_song","effects":[{"type":"buff","stats":["atk","def"],"stage":1,"turns":3}],"desc":"勇気を呼び覚ます歌（ゲルと同時使用で効果1.5倍）"},
+  "muni_15": {"name":"女神の子守唄","owner":"muni","learn_lv":60,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":22,"effects":[{"type":"heal","ratio":0.40}],"desc":"全員を包む癒しの子守唄"},
+
+  "geru_01": {"name":"突き","owner":"geru","learn_lv":1,"kind":"physical","target":"enemy_single","accuracy":95,"power":1.1,"hits":1,"sp_cost":3,"effects":[],"desc":"槍の鋭い突き"},
+  "geru_02": {"name":"薙ぎ払い","owner":"geru","learn_lv":8,"kind":"physical","target":"enemy_all","accuracy":85,"power":1.0,"hits":1,"sp_cost":8,"effects":[],"desc":"横一閃の全体攻撃"},
+  "geru_03": {"name":"鼓舞","owner":"geru","learn_lv":16,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":10,"effects":[{"type":"buff","stats":["atk"],"stage":1,"turns":2}],"desc":"味方を奮い立たせる"},
+  "geru_08": {"name":"貫通突き","owner":"geru","learn_lv":28,"kind":"physical","target":"enemy_single","accuracy":90,"power":2.3,"hits":1,"sp_cost":13,"effects":[],"desc":"防御を貫く渾身の突き"},
+  "geru_11": {"name":"勇気の歌","owner":"geru","learn_lv":47,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":16,"song_id":"brave_song","effects":[{"type":"buff","stats":["atk","def"],"stage":1,"turns":3}],"desc":"勇気を呼び覚ます歌（ムニと同時使用で効果1.5倍）"},
+  "geru_15": {"name":"英雄の号令","owner":"geru","learn_lv":60,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":18,"effects":[{"type":"buff","stats":["atk","def","spd","skl"],"stage":1,"turns":3}],"desc":"英雄の号令が響く。全員の力が最大まで引き出される"},
+
+  "neo_01": {"name":"光弾","owner":"neo","learn_lv":1,"kind":"magic","target":"enemy_single","accuracy":95,"power":1.1,"hits":1,"sp_cost":4,"effects":[],"desc":"光の弾を放つ"},
+  "neo_02": {"name":"治癒の光","owner":"neo","learn_lv":6,"kind":"support","target":"ally_single","accuracy":100,"power":null,"sp_cost":8,"effects":[{"type":"heal","ratio":0.30}],"desc":"光で傷を癒す"},
+  "neo_03": {"name":"聖なる盾","owner":"neo","learn_lv":16,"kind":"support","target":"ally_single","accuracy":100,"power":null,"sp_cost":10,"effects":[{"type":"buff","stats":["def"],"stage":2,"turns":3}],"desc":"聖なる盾で守る"},
+  "neo_08": {"name":"光聖斬","owner":"neo","learn_lv":30,"kind":"magic","target":"enemy_single","accuracy":90,"power":2.2,"hits":1,"sp_cost":14,"effects":[{"type":"anti_demon","mult":1.5}],"desc":"聖剣に光を宿す斬撃。悪魔に特効"},
+  "neo_10": {"name":"浄化の光","owner":"neo","learn_lv":45,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":16,"effects":[{"type":"cure"},{"type":"anti_demon","mult":1.5}],"desc":"状態異常を浄化し、取り憑きを祓う"},
+  "neo_15": {"name":"聖光爆裂","owner":"neo","learn_lv":60,"kind":"magic","target":"enemy_all","accuracy":90,"power":2.6,"hits":1,"sp_cost":22,"effects":[{"type":"anti_demon","mult":1.5}],"desc":"聖なる光が爆ぜる。悪魔に特効"},
+
+  "goddess_01": {"name":"水の癒し","owner":"goddess","learn_lv":1,"kind":"support","target":"ally_single","accuracy":100,"power":null,"sp_cost":6,"effects":[{"type":"heal","ratio":0.35}],"desc":"清らかな水で癒す"},
+  "goddess_02": {"name":"清水の刃","owner":"goddess","learn_lv":6,"kind":"magic","target":"enemy_single","accuracy":95,"power":1.2,"hits":1,"sp_cost":6,"effects":[],"desc":"清水の刃を放つ"},
+  "goddess_03": {"name":"加護","owner":"goddess","learn_lv":16,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":12,"effects":[{"type":"buff","stats":["def"],"stage":1,"turns":3}],"desc":"女神の加護で守る"},
+  "goddess_08": {"name":"大治癒","owner":"goddess","learn_lv":30,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":16,"effects":[{"type":"heal","ratio":0.35}],"desc":"全員をまとめて癒す"},
+  "goddess_10": {"name":"水神の裁き","owner":"goddess","learn_lv":45,"kind":"magic","target":"enemy_all","accuracy":90,"power":2.4,"hits":1,"sp_cost":20,"effects":[],"desc":"水神の怒りが降り注ぐ"},
+  "goddess_15": {"name":"生命の泉","owner":"goddess","learn_lv":60,"kind":"support","target":"ally_all","accuracy":100,"power":null,"sp_cost":24,"effects":[{"type":"heal","ratio":0.50},{"type":"cure"}],"desc":"生命の泉が全員を癒し浄化する"}
+}

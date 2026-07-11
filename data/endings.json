@@ -1,0 +1,30 @@
+{
+  "_source": "第12巻未受領のため大半は【AI提案・要差替】。真ED条件(除外0+avg80+核心7/7+隠し旗)は第16巻20-8で確定。GO5条件は第0巻0-3-4で確定。",
+  "gameover": {
+    "GO1": {"name":"保持者の死亡","reason":"holder_death"},
+    "GO2": {"name":"保持者の誘拐","reason":"holder_kidnap"},
+    "GO3": {"name":"保持者が悪魔に取り憑かれる","reason":"holder_possess"},
+    "GO4": {"name":"炎の女神への供物を怠り火山噴火","reason":"tribute_fire_expired"},
+    "GO5": {"name":"水の女神への供物を怠り島水没","reason":"tribute_water_expired"}
+  },
+  "endings": {
+    "TRUE": {
+      "name":"真エンディング「希望の種、芽吹く」",
+      "priority": 100,
+      "cond": {"exclusions_max":0,"trust_avg_min":80,"core_events_required":7,"hidden_flag":true},
+      "desc":"全員生存・深い絆・核心イベント全達成・隠し女神の解放。島に希望が芽吹く。"
+    },
+    "GOOD": {
+      "name":"グッドエンディング「生きて還る」",
+      "priority": 50,
+      "cond": {"exclusions_max":1,"trust_avg_min":50},
+      "desc":"365日を生き延び、仲間とともに島を脱出する。"
+    },
+    "NORMAL": {
+      "name":"ノーマルエンディング「1年の果て」",
+      "priority": 10,
+      "cond": {"survived_day":365},
+      "desc":"ともかく365日を生き延びた。"
+    }
+  }
+}

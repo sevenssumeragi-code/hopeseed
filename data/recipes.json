@@ -1,0 +1,22 @@
+{
+  "_source": "第7巻9章未受領のため【AI提案・要差替】。type=cook/build/pharmacy。skill_reqは対応するcraft値。",
+
+  "cook": [
+    {"id":"grilled_meat","result":"grilled_meat","inputs":[{"item":"raw_meat","qty":1}],"skill_req":0},
+    {"id":"grilled_fish","result":"grilled_fish","inputs":[{"item":"fish","qty":1}],"skill_req":0},
+    {"id":"herb_soup","result":"herb_soup","inputs":[{"item":"herb_leaf","qty":1},{"item":"raw_meat","qty":1}],"skill_req":30}
+  ],
+  "build": [
+    {"id":"iron_sword","result":"iron_sword","inputs":[{"item":"iron_scrap","qty":2}],"skill_req":20},
+    {"id":"iron_dagger","result":"iron_dagger","inputs":[{"item":"iron_scrap","qty":1}],"skill_req":15},
+    {"id":"iron_axe","result":"iron_axe","inputs":[{"item":"iron_scrap","qty":2},{"item":"fire_stone","qty":1}],"skill_req":25},
+    {"id":"iron_spear","result":"iron_spear","inputs":[{"item":"iron_scrap","qty":2}],"skill_req":20}
+  ],
+  "pharmacy": [
+    {"id":"antidote","result":"antidote","inputs":[{"item":"herb_leaf","qty":1}],"skill_req":20},
+    {"id":"styptic","result":"styptic","inputs":[{"item":"herb_leaf","qty":2}],"skill_req":30},
+    {"id":"fever_cure","result":"fever_cure","inputs":[{"item":"herb_leaf","qty":1},{"item":"toxic_pollen","qty":1}],"skill_req":45},
+    {"id":"potion","result":"potion","inputs":[{"item":"herb_leaf","qty":2}],"skill_req":25},
+    {"id":"cure_all","result":"cure_all","inputs":[{"item":"herb_leaf","qty":3},{"item":"toxic_pollen","qty":1}],"skill_req":60}
+  ]
+}
