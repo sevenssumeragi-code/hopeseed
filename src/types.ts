@@ -1,21 +1,23 @@
 // ホープシード 型定義
-// GDD第16巻20-3(JSONスキーマ)・20-4(状態遷移)・20-5(クラス設計)に対応。
+// GDD第16巻20-3/20-4/20-5 + 第5〜8巻・第14巻の正データ対応版。
 
 export type TimeSlot = "morning" | "noon" | "evening" | "night";
 export type Tide = "low" | "high";
 export type Goddess = "fire" | "water";
 
-export type SkillKind = "physical" | "magic" | "support";
+export type SkillKind = "physical" | "magic" | "support" | "heal";
 export type SkillTarget =
   | "enemy_single" | "enemy_all"
-  | "ally_single" | "ally_all" | "self";
+  | "ally_single" | "ally_all" | "self" | "holder";
 
-// 第16巻20-3-2 effects.type 列挙(1対1)
+// 第6巻7-0-1 効果対応表 + 第8巻敵特殊効果
 export type EffectType =
-  | "buff" | "debuff" | "poison" | "burn" | "bleed" | "paralysis"
-  | "plague" | "heal" | "cure" | "protect_rate" | "crit_bonus"
+  | "buff" | "debuff" | "ally_buff" | "self_buff"
+  | "poison" | "burn" | "bleed" | "paralysis" | "plague"
+  | "heal" | "cure" | "protect_rate" | "crit_bonus"
   | "anti_demon" | "night_bonus" | "hp_scaling" | "instant_death"
-  | "possess" | "coma_battle";
+  | "hit_debuff" | "lifesteal" | "self_status_bonus" | "poison_target_bonus"
+  | "party_attack" | "possess" | "kidnap" | "sleep_skip" | "summon" | "hope_devour";
 
 export interface SkillEffect {
   type: EffectType;
@@ -23,9 +25,18 @@ export interface SkillEffect {
   stats?: string[];
   stage?: number;
   turns?: number;
-  ratio?: number;   // heal 割合
-  amount?: number;  // crit_bonus 等
-  mult?: number;    // night_bonus / anti_demon
+  coef?: number;      // heal: 技量×coef（第6巻7-0-2）
+  amount?: number;    // crit_bonus / protect_rate / hit_debuff
+  mult?: number;      // night_bonus / anti_demon / hp_scaling / poison_target_bonus / self_status_bonus
+  mode?: string;      // hp_scaling: below_half / missing
+  ratio?: number;     // lifesteal
+  statuses?: string[]; // cure対象
+  condition?: string;
+  enemy?: string;     // summon
+  count?: number;
+  guard_negates?: boolean;
+  protect_negates?: boolean;
+  renny_immune?: boolean;
 }
 
 export interface Skill {
@@ -55,23 +66,33 @@ export interface CharacterDef {
   hidden?: boolean;
   base: StatBlock;
   growth: StatBlock;
+  derived?: Record<string, [string, number]>;   // 女神(第5巻6-7)
+  crit_formula?: { base: number; per_lv: number };
+  join_min_lv?: number;
   craft: { cook: number; build: number; pharmacy: number };
-  weakness: { type: string; detail: string };
+  weakness: { battle_family: string | null; type: string; detail: string };
   ability_battle: Record<string, unknown> & { id: string };
   ability_holder: Record<string, unknown> & { id: string };
-  skills: string[];
+  ability_passive?: Record<string, unknown> & { id: string };
   weapon_type: string;
+  initial_weapon?: string;
   route_id: string | null;
 }
 
 export type ExclusionKind = "none" | "dead" | "kidnapped" | "betrayal" | "coma";
 
+// 状態異常（第14巻18-4タイマー管理）
 export interface StatusState {
-  poison?: number;   // 残り日数
-  bleed?: number;
-  plague?: number;   // 重症化進行度(0..1) 実装では発症日数で管理
-  paralysis?: number;
-  plague_chance?: number;
+  poison?: number;            // 残り日数(7)
+  burn?: number;              // 残り日数(7)・作業不可
+  bleed?: number;             // 残り日数(3)・作業不可・拠点治療のみ
+  paralysis?: number;         // 残りターン(戦闘)／日(移動リスク)
+  plagueDay?: number;         // 発症からの日数
+  plagueSevereDays?: number;  // 重症化してからの日数
+  infectDay?: number;
+  infectSevereDays?: number;
+  obesityPlainDays?: number;  // 肥満: 粗食日数(7で解消)
+  obesity?: boolean;
 }
 
 export interface CharacterState {
@@ -86,25 +107,43 @@ export interface CharacterState {
   comaDaysLeft: number;
   betrayalDaysLeft: number;
   status: StatusState;
-  // 戦闘中バフ段階(-2..+2)
-  buffs: Record<string, number>;
+  buffs: Record<string, number>;       // 段階 -2..+2
+  buffTurns: Record<string, number>;   // 残ターン
+  hitDebuff: number;                   // 命中低下%(残ターンはhitDebuffTurns)
+  hitDebuffTurns: number;
+  protectRateBuff: number;             // 庇う成功率補正%
+  protectRateTurns: number;
+  atkBuffNextBattle: number;           // 海賊風煮込み
   equippedWeapon: string | null;
-  downed: boolean; // 戦闘不能(HP0)。戦闘終了時にdead確定
+  downed: boolean;
 }
 
 export interface EnemyDef {
   name: string;
   family: string;
   boss?: boolean;
-  base: { hp: number; atk: number; def: number; spd: number; skl: number; eva: number };
+  base?: { hp: number; atk: number; def: number; spd: number; skl: number; eva: number };
+  min_lv?: number;
+  hp_fixed?: number;
+  stat_ref?: string;
+  stat_mult?: Record<string, number>;
   ai: string;
+  ai_plan?: Record<string, unknown> & { type: string };
   exp_base: number;
-  weakness?: string;
   tide_exempt?: boolean;
+  light_damage_mult?: number;
   victory?: string;
+  unlock?: Record<string, unknown>;
+  special_rule?: Record<string, unknown>;
+  on_defeat?: Record<string, unknown>;
   skills: EnemySkill[];
   drops: { item: string; rate: number }[];
-  spawn?: { areas: string[]; time: string; tide_multiplier?: number };
+  silver?: [number, number];
+  silver_reward?: number;
+  spawn?: {
+    areas: string[]; time?: string; tide_multiplier?: number;
+    from_day?: number; stationary?: boolean;
+  };
   location?: string;
 }
 
@@ -112,48 +151,74 @@ export interface EnemySkill {
   name: string;
   accuracy: number;
   power: number | null;
+  hits?: number;
   target?: string;
   condition?: string;
+  cooldown?: number;
+  once?: boolean;
+  telegraph?: string;
   effects: SkillEffect[];
 }
 
 export interface EnemyState {
   id: string;
+  defId: string;
   def: EnemyDef;
+  level: number;
   hp: number;
   maxHp: number;
+  atk: number; defStat: number; spd: number; skl: number; eva: number;
   buffs: Record<string, number>;
   status: StatusState;
   alive: boolean;
+  cooldowns: Record<string, number>;
+  usedOnce: Set<string>;
+  telegraphed: string | null;   // 予告中の技名
 }
 
 export interface ItemDef {
   name: string;
   category: string;
   family?: string;
+  sell?: number | null;
   desc: string;
-  hunger_restore?: number;
-  hp_restore?: number;
-  sp_restore?: number;
+  dish?: boolean;
+  great_name?: string;
+  special?: Record<string, unknown>;
+  craft_bonus?: number;
+  raw_edible?: { hp_ratio: number };
+  raw_risk?: Record<string, number>;
   cure?: string[];
-  revive?: boolean;
+  field_only?: boolean;
   weapon_type?: string;
+  tier?: number;
   atk_bonus?: number;
+  mag_bonus?: number;
+  protect_bonus?: number;
+  effect?: Record<string, unknown>;
+  catalyst?: { recipe: string; bonus: number };
 }
 
 export interface MapDef {
   name: string;
   area_type: string;
   size: [number, number];
-  encounter_rate: number;
+  density_day: number;
+  density_night: number;
   enemies: string[];
   night_enemies?: string[];
-  gather: { item: string; rate: number }[];
+  night_no_pirates?: boolean;
+  no_respawn?: boolean;
+  gather: { item: string; rate: number; respawn?: string; low_tide_only?: boolean; risk_battle?: number }[];
   connections: string[];
   is_base?: boolean;
   tidal?: boolean;
   has_shrine?: Goddess;
   boss?: string;
+  drift_point?: boolean;
+  paralysis_death_zone?: boolean;
+  paralysis_death_zone_high_tide?: boolean;
+  requires_for?: Record<string, string>;
 }
 
 export interface ScenarioEvent {
@@ -176,24 +241,40 @@ export type GOReason =
   | "holder_death" | "holder_kidnap" | "holder_possess"
   | "tribute_fire_expired" | "tribute_water_expired";
 
+export type FoodQuality = "great" | "normal" | "poor";
+
+export interface FoodStockEntry {
+  dishId: string;
+  quality: FoodQuality;
+  madeDay: number;
+}
+
 export interface GameState {
   day: number;
   slot: TimeSlot;
   tide: Tide;
   weather: string;
+  prevWeather: string;
   holder: string;
   location: string;
   party: Record<string, CharacterState>;
   flags: Record<string, boolean>;
   inventory: Record<string, number>;
+  foodStock: FoodStockEntry[];
+  silver: number;
   trust: Record<string, number>;
-  tribute: { fireLastDay: number; waterLastDay: number };
+  tribute: {
+    fireLastDay: number; waterLastDay: number;
+    fireCount: number; waterCount: number;
+  };
   hunger: number;
   starvingDays: number;
+  exploredToday: boolean;
   reviveLastDay: number;
   stats: {
     battlesWon: number; cooked: number; built: number; brewed: number;
     revived: number; protectSuccess: number;
+    sharkKills: number; comaTotal: number;
   };
   achievements: string[];
   gameOver: GOReason | null;

@@ -1,8 +1,9 @@
 // ホープシード メインUI（GDD第16巻20-4-1 FSMに沿った画面遷移）。
 // Title → HolderSelect → DayLoop(Base⇄Map⇄Battle) → Ending/GameOver。
 
-import { DB } from "./dataLoader.js";
+import { DB, getEnemyDef } from "./dataLoader.js";
 import { GameManager } from "./core/gameManager.js";
+import { skillsForCharacter, enhancedSkill } from "./core/stats.js";
 import { FieldState, type FieldSymbol } from "./field/field.js";
 import { rulebookText } from "./ui/rulebook.js";
 import type { BattleManager, Command } from "./core/battle/battleManager.js";
@@ -37,17 +38,17 @@ function renderHUD(): void {
   const el = $("#hud");
   if (!gm.gs) { el.innerHTML = ""; return; }
   const slotNames: Record<string, string> = { morning: "朝", noon: "昼", evening: "夕", night: "夜" };
-  const weatherNames: Record<string, string> = DB.weather.types;
   const fireLeft = gm.tribute.remainingDays("fire");
   const waterLeft = gm.tribute.remainingDays("water");
   const holder = DB.characters[gm.gs.holder].name;
   el.innerHTML = `
     <div class="hud-item"><span class="hud-label">日数</span><span class="hud-value">${gm.gs.day}/${DB.config.DAY_MAX}日</span></div>
     <div class="hud-item"><span class="hud-label">時刻</span><span class="hud-value">${slotNames[gm.gs.slot]}</span></div>
-    <div class="hud-item"><span class="hud-label">天候</span><span class="hud-value">${(weatherNames as any)[gm.gs.weather]?.name ?? gm.gs.weather}</span></div>
+    <div class="hud-item"><span class="hud-label">天候</span><span class="hud-value">${gm.weather.name(gm.gs.weather)}</span></div>
     <div class="hud-item"><span class="hud-label">潮</span><span class="hud-value">${gm.gs.tide === "high" ? "満潮" : "干潮"}</span></div>
     <div class="hud-item"><span class="hud-label">保持者</span><span class="hud-value">🌱${holder}</span></div>
-    <div class="hud-item"><span class="hud-label">空腹</span><span class="hud-value ${gm.gs.hunger <= 20 ? "warn" : ""}">${gm.gs.hunger}/100</span></div>
+    <div class="hud-item"><span class="hud-label">空腹</span><span class="hud-value ${gm.gs.hunger <= 30 ? "warn" : ""}">${gm.gs.hunger}/100</span></div>
+    <div class="hud-item"><span class="hud-label">銀貨</span><span class="hud-value">${gm.gs.silver}</span></div>
     <div class="hud-item"><span class="hud-label">炎の供物</span><span class="hud-value ${fireLeft <= 3 ? "warn" : ""}">あと${fireLeft}日</span></div>
     <div class="hud-item"><span class="hud-label">水の供物</span><span class="hud-value ${waterLeft <= 3 ? "warn" : ""}">あと${waterLeft}日</span></div>
     <div class="hud-item"><button class="small" id="btn-rulebook">📖 ルールブック</button></div>
@@ -80,13 +81,21 @@ function showModal(title: string, body: string, onClose?: () => void): void {
 function showPartyStatus(): void {
   const rows = Object.values(gm.gs.party).map((c) => {
     const d = DB.characters[c.id];
+    const stNames: Record<string, string> = {
+      poison: "毒", burn: "大火傷", bleed: "大出血", paralysis: "しびれ",
+      plagueDay: "疫病", infectDay: "感染症", obesity: "肥満",
+    };
+    const active = Object.entries(c.status)
+      .filter(([k, v]) => stNames[k] && v !== undefined && v !== false)
+      .map(([k]) => stNames[k]);
     const st = c.exclusion !== "none"
       ? { dead: "死亡", kidnapped: "誘拐", betrayal: "裏切り", coma: "昏睡" }[c.exclusion]
-      : Object.keys(c.status).length > 0 ? Object.keys(c.status).join("/") : "正常";
+      : active.length > 0 ? active.join("/") : "正常";
+    const w = c.equippedWeapon ? DB.items[c.equippedWeapon]?.name : "素手";
     return `<tr><td>${c.id === gm.gs.holder ? "🌱" : ""}${d.name}</td><td>Lv${c.level}</td>
-      <td>${c.hp}/${c.maxHp}</td><td>${c.sp}/${c.maxSp}</td><td>${st}</td></tr>`;
+      <td>${c.hp}/${c.maxHp}</td><td>${c.sp}/${c.maxSp}</td><td>${st}</td><td>${w}</td></tr>`;
   }).join("");
-  showModal("なかま", `<table class="data"><tr><th>名前</th><th>Lv</th><th>HP</th><th>SP</th><th>状態</th></tr>${rows}</table>
+  showModal("なかま", `<table class="data"><tr><th>名前</th><th>Lv</th><th>HP</th><th>SP</th><th>状態</th><th>武器</th></tr>${rows}</table>
     <p style="margin-top:10px;font-size:12px">保持者との平均信頼度: ${gm.trust.avgHolder().toFixed(1)}</p>`);
 }
 
@@ -188,11 +197,13 @@ function renderPhase(): void {
 // ============ Base ============
 function renderBase(): void {
   cancelAnimationFrame(fieldRAF);
-  const foods = Object.entries(gm.gs.inventory)
-    .filter(([id, n]) => n > 0 && DB.items[id]?.category === "food");
+  const foods = gm.gs.foodStock;
+  const raws = Object.entries(gm.gs.inventory)
+    .filter(([id, n]) => n > 0 && (DB.items[id]?.raw_edible || DB.items[id]?.raw_risk));
   const deadMembers = Object.values(gm.gs.party).filter((c) => c.exclusion === "dead");
   const reviveReady = deadMembers.length > 0
     && (gm.gs.reviveLastDay === 0 || gm.gs.day - gm.gs.reviveLastDay >= DB.config.revive.cooldown_days);
+  const bleeding = Object.values(gm.gs.party).filter((c) => c.status.bleed !== undefined && c.exclusion === "none");
 
   screen().innerHTML = `
     <div class="screen-inner">
@@ -201,7 +212,10 @@ function renderBase(): void {
         <button id="b-craft-cook">🍳 調理</button>
         <button id="b-craft-build">🔨 工作</button>
         <button id="b-craft-pharmacy">🌿 薬草開発</button>
-        <button id="b-eat" ${foods.length === 0 ? "disabled" : ""}>🍖 食事</button>
+        <button id="b-eat" ${foods.length === 0 && raws.length === 0 ? "disabled" : ""}>🍖 食事</button>
+        <button id="b-treat" ${bleeding.length === 0 ? "disabled" : ""}>🩹 治療（大出血の処置）</button>
+        <button id="b-medicine">💊 薬を使う</button>
+        <button id="b-equip">⚔️ 装備</button>
         <button id="b-revive" ${reviveReady ? "" : "disabled"}>⛩️ 湖の祠（蘇生）</button>
         <button id="b-talk">💬 会話</button>
         <button id="b-rest">😴 休息（就寝して翌日へ）</button>
@@ -215,17 +229,103 @@ function renderBase(): void {
   $("#b-craft-pharmacy").onclick = () => renderCraft("pharmacy");
   $("#b-eat").onclick = () => {
     const detail = $("#base-detail");
-    detail.innerHTML = `<h3 class="section-title">なにを食べる？</h3><div class="row">` +
-      foods.map(([id, n]) => `<button class="small food-btn" data-id="${id}">${DB.items[id].name} ×${n}</button>`).join("") + "</div>";
-    detail.querySelectorAll(".food-btn").forEach((b) => {
+    const qLabel = { great: "◎おいしい", normal: "○ふつう", poor: "△かろうじて" } as const;
+    const dishBtns = foods.map((f, i) => {
+      const item = DB.items[f.dishId];
+      const left = DB.config.craft.food_expire_days - (gm.gs.day - f.madeDay);
+      return `<button class="small dish-btn" data-i="${i}">${qLabel[f.quality]} ${f.quality === "great" ? item.great_name : item.name}（あと${left}日）</button>`;
+    }).join(" ");
+    const rawBtns = raws.map(([id, n]) =>
+      `<button class="small raw-btn" data-id="${id}">${DB.items[id].name} ×${n}（生食）</button>`).join(" ");
+    detail.innerHTML = `<h3 class="section-title">なにを食べる？（料理は保存3日）</h3>
+      <div class="row">${dishBtns || "<i>料理のストックがない。調理しよう。</i>"}</div>
+      <div class="row">${rawBtns}</div>`;
+    detail.querySelectorAll(".dish-btn").forEach((b) => {
       (b as HTMLElement).onclick = () => {
-        const id = (b as HTMLElement).dataset.id!;
-        if (gm.eat(id)) {
-          log(`${DB.items[id].name}をみんなで食べた。空腹 ${gm.gs.hunger}/100`);
-          gm.advanceTime(1);
-          checkEvents();
-          renderPhase();
-        }
+        const r = gm.eatDish(Number((b as HTMLElement).dataset.i), gm.gs.holder);
+        log(r.message + ` 空腹 ${gm.gs.hunger}/100`);
+        gm.advanceTime(1);
+        checkEvents();
+        renderPhase();
+      };
+    });
+    detail.querySelectorAll(".raw-btn").forEach((b) => {
+      (b as HTMLElement).onclick = () => {
+        const r = gm.eatRaw((b as HTMLElement).dataset.id!, gm.gs.holder);
+        log(r.message + ` 空腹 ${gm.gs.hunger}/100`);
+        renderPhase();
+      };
+    });
+  };
+  $("#b-treat").onclick = () => {
+    const detail = $("#base-detail");
+    const healers = gm.party.getActiveMembers().filter((c) => gm.craft.canWork(c.id));
+    detail.innerHTML = `<h3 class="section-title">処置（大出血は薬では治らない）— 誰が処置する？</h3><div class="row">` +
+      healers.map((c) => `<button class="small healer-btn" data-id="${c.id}">${DB.characters[c.id].name}（薬学${DB.characters[c.id].craft.pharmacy}）</button>`).join(" ") + "</div><div id=\"patient-list\"></div>";
+    detail.querySelectorAll(".healer-btn").forEach((b) => {
+      (b as HTMLElement).onclick = () => {
+        const healerId = (b as HTMLElement).dataset.id!;
+        const list = $("#patient-list");
+        list.innerHTML = `<div class="row" style="margin-top:8px">` +
+          bleeding.map((c) => `<button class="small patient-btn" data-id="${c.id}">${DB.characters[c.id].name}</button>`).join(" ") + "</div>";
+        list.querySelectorAll(".patient-btn").forEach((pb) => {
+          (pb as HTMLElement).onclick = () => {
+            const r = gm.craft.treatBleed(healerId, (pb as HTMLElement).dataset.id!);
+            log(r.message, r.ok);
+            gm.advanceTime(1);
+            renderPhase();
+          };
+        });
+      };
+    });
+  };
+  $("#b-medicine").onclick = () => {
+    const detail = $("#base-detail");
+    const meds = Object.entries(gm.gs.inventory)
+      .filter(([id, n]) => n > 0 && DB.items[id]?.category === "medicine");
+    if (meds.length === 0) { detail.innerHTML = "<p>薬を持っていない。薬草開発で作ろう。</p>"; return; }
+    detail.innerHTML = `<h3 class="section-title">どの薬を使う？</h3><div class="row">` +
+      meds.map(([id, n]) => `<button class="small med-btn" data-id="${id}">${DB.items[id].name} ×${n}</button>`).join(" ") + "</div><div id=\"med-target\"></div>";
+    detail.querySelectorAll(".med-btn").forEach((b) => {
+      (b as HTMLElement).onclick = () => {
+        const medId = (b as HTMLElement).dataset.id!;
+        const targets = gm.party.getActiveMembers();
+        const t = $("#med-target");
+        t.innerHTML = `<div class="row" style="margin-top:8px">` +
+          targets.map((c) => `<button class="small mt-btn" data-id="${c.id}">${DB.characters[c.id].name}</button>`).join(" ") + "</div>";
+        t.querySelectorAll(".mt-btn").forEach((tb) => {
+          (tb as HTMLElement).onclick = () => {
+            const r = gm.useMedicine(medId, (tb as HTMLElement).dataset.id!);
+            log(r.message, r.ok);
+            renderPhase();
+          };
+        });
+      };
+    });
+  };
+  $("#b-equip").onclick = () => {
+    const detail = $("#base-detail");
+    const members = gm.party.getActiveMembers();
+    detail.innerHTML = `<h3 class="section-title">誰の装備を替える？</h3><div class="row">` +
+      members.map((c) => `<button class="small eq-btn" data-id="${c.id}">${DB.characters[c.id].name}（${c.equippedWeapon ? DB.items[c.equippedWeapon].name : "素手"}）</button>`).join(" ") + "</div><div id=\"eq-list\"></div>";
+    detail.querySelectorAll(".eq-btn").forEach((b) => {
+      (b as HTMLElement).onclick = () => {
+        const charId = (b as HTMLElement).dataset.id!;
+        const wtype = DB.characters[charId].weapon_type;
+        const weapons = Object.entries(gm.gs.inventory)
+          .filter(([id, n]) => n > 0 && DB.items[id]?.category === "weapon" && DB.items[id].weapon_type === wtype);
+        const list = $("#eq-list");
+        list.innerHTML = weapons.length === 0 ? "<p>この武器種の持ち合わせがない。工作で作ろう。</p>"
+          : `<div class="row" style="margin-top:8px">` +
+            weapons.map(([id]) => `<button class="small wp-btn" data-id="${id}">${DB.items[id].name}（攻+${DB.items[id].atk_bonus ?? 0}${DB.items[id].mag_bonus ? " 魔+" + DB.items[id].mag_bonus : ""}）</button>`).join(" ") + "</div>";
+        list.querySelectorAll(".wp-btn").forEach((wb) => {
+          (wb as HTMLElement).onclick = () => {
+            if (gm.equip(charId, (wb as HTMLElement).dataset.id!)) {
+              log(`${DB.characters[charId].name}の装備を替えた。`);
+              renderPhase();
+            }
+          };
+        });
       };
     });
   };
@@ -271,8 +371,10 @@ function renderBase(): void {
     detail.querySelectorAll(".dest-btn").forEach((b) => {
       (b as HTMLElement).onclick = () => {
         const to = (b as HTMLElement).dataset.to!;
+        const r = gm.moveTo(to);
+        if (!r.ok) { log("そこへはまだ行けない。"); return; }
         log(`${DB.maps[to].name}へ向かった。`);
-        gm.advanceTime(1);
+        for (const d of r.deaths) log(`${DB.characters[d].name}はしびれたまま危険地帯に踏み込み、還らなかった…`, true);
         if (gm.phase === ("gameover" as typeof gm.phase)) { renderPhase(); return; }
         gm.phase = "map";
         startField(to);
@@ -315,8 +417,16 @@ function renderCraft(type: "cook" | "build" | "pharmacy"): void {
 // ============ Field ============
 function startField(mapId: string): void {
   gm.gs.location = mapId;
-  const bossDefeated = mapId === "pirate_ship" && !!gm.gs.flags["pirate_captain_defeated"];
-  field = new FieldState(mapId, gm.rng, gm.gs.slot, { bossDefeated });
+  const bossDefeated = !!gm.gs.flags[`${DB.maps[mapId].boss}_defeated`];
+  // 加護のエンカウント補正（第14巻18-2: ジンパチ保持者=登山道−40%/レニィ保持者=浅瀬−40%）
+  let densityMult = 1.0;
+  if (gm.gs.holder === "jinpachi" && mapId === "volcano") densityMult = 0.6;
+  if (gm.gs.holder === "renny" && mapId === "shallows") densityMult = 0.6;
+  if ((gm.gs.inventory["torch"] ?? 0) > 0 && gm.gs.slot === "night") densityMult -= 0.10;
+  field = new FieldState(mapId, gm.rng, gm.gs.slot, {
+    bossDefeated, day: gm.gs.day, densityMult,
+    piratesStopped: !!gm.gs.flags["pirates_stopped"],
+  });
   gm.phase = DB.maps[mapId].is_base ? "base" : "map";
   if (gm.phase === "base") { renderPhase(); return; }
   renderField();
@@ -332,6 +442,7 @@ function renderField(): void {
     </div>
     <div class="field-actions">
       <button class="small" id="f-back">🏕️ 拠点へ戻る</button>
+      ${gm.dogAvailable() ? '<button class="small" id="f-shop">🏪 ドグの店</button>' : ""}
     </div>`;
   const canvas = $("#field-canvas") as HTMLCanvasElement;
   const resize = () => {
@@ -348,6 +459,8 @@ function renderField(): void {
     checkEvents();
     renderPhase();
   };
+  const shopBtn = document.querySelector("#f-shop") as HTMLElement | null;
+  if (shopBtn) shopBtn.onclick = () => { cancelAnimationFrame(fieldRAF); openDogShop(); };
 
   const loop = () => {
     if (gm.phase !== "map" || !field) return;
@@ -370,8 +483,15 @@ function handleFieldContact(s: FieldSymbol): void {
   switch (s.kind) {
     case "exit": {
       cancelAnimationFrame(fieldRAF);
+      const r = gm.moveTo(s.exitTo!);
+      if (!r.ok) {
+        log(`${DB.maps[s.exitTo!].name}へは渡れない。（小舟の修理材が必要かもしれない）`);
+        gm.phase = "map";
+        renderFieldLoopResume();
+        return;
+      }
       log(`${DB.maps[s.exitTo!].name}へ移動した。`);
-      gm.advanceTime(1);
+      for (const d of r.deaths) log(`${DB.characters[d].name}はしびれたまま危険地帯に踏み込み、還らなかった…`, true);
       if (gm.phase === "gameover") { renderPhase(); return; }
       startField(s.exitTo!);
       checkEvents();
@@ -392,6 +512,12 @@ function handleFieldContact(s: FieldSymbol): void {
       return;
     }
     case "enemy": case "boss": {
+      if (s.kind === "boss" && !gm.bossUnlocked(s.bossId!)) {
+        log("……まだその時ではないようだ。（出現条件未達成）");
+        field.removeSymbol(s);
+        fieldRAF = requestAnimationFrame(() => renderFieldLoopResume());
+        return;
+      }
       cancelAnimationFrame(fieldRAF);
       const enc = field.buildEncounter(s, gm.gs.tide);
       field.removeSymbol(s);
@@ -447,7 +573,7 @@ function openShrine(goddess: "fire" | "water"): void {
 // ============ Battle ============
 function openMemberSelect(enemyIds: string[], isBoss: boolean, bossId?: string): void {
   const active = gm.party.getActiveMembers();
-  const enemyNames = enemyIds.map((id) => (DB.enemies[id] ?? DB.bosses[id]).name).join("、");
+  const enemyNames = enemyIds.map((id) => getEnemyDef(id).name).join("、");
   battleMembers = [gm.gs.holder];
   const back = document.createElement("div");
   back.className = "modal-back";
@@ -571,10 +697,10 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
       return;
     }
     case "skill": {
-      const learned = DB.characters[actor.id].skills
-        .filter((sid) => DB.skills[sid] && DB.skills[sid].learn_lv <= actor.level);
-      const btns = learned.map((sid) => {
-        const s = DB.skills[sid];
+      const learned = skillsForCharacter(actor.id)
+        .filter(([, sk]) => sk.learn_lv <= actor.level);
+      const btns = learned.map(([sid, raw]) => {
+        const s = enhancedSkill(raw, actor.level);
         const ok = actor.sp >= s.sp_cost;
         return `<button class="small sk-btn" data-sid="${sid}" ${ok ? "" : "disabled"}>${s.name}（SP${s.sp_cost}）</button>`;
       }).join(" ");
@@ -584,9 +710,9 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
         (t as HTMLElement).onclick = () => {
           const sid = (t as HTMLElement).dataset.sid!;
           const s = DB.skills[sid];
-          if (s.kind === "support" && (s.target === "ally_all" || s.target === "self")) {
+          if ((s.kind === "support" || s.kind === "heal") && (s.target === "ally_all" || s.target === "self")) {
             pushAndNext({ kind, actorId: actor.id, skillId: sid });
-          } else if (s.kind === "support" && s.target === "ally_single") {
+          } else if ((s.kind === "support" || s.kind === "heal") && s.target === "ally_single") {
             const allies = b.allies.filter((a) => !a.state.downed).map((a) =>
               `<button class="small at-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
             cmdBar.innerHTML = `<b>誰に？</b> ${allies}`;
@@ -621,7 +747,7 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
     }
     case "item": {
       const usable = Object.entries(gm.gs.inventory).filter(([id, n]) =>
-        n > 0 && (DB.items[id]?.category === "medicine" || DB.items[id]?.category === "food"));
+        n > 0 && DB.items[id]?.category === "medicine" && !DB.items[id]?.field_only);
       if (usable.length === 0) { cmdBar.innerHTML += " <i>使えるものがない</i>"; return; }
       const btns = usable.map(([id, n]) =>
         `<button class="small i-btn" data-id="${id}">${DB.items[id].name}×${n}</button>`).join(" ");
@@ -669,8 +795,40 @@ function execBattleTurn(): void {
   for (const k of result.kidnapped) {
     log(`${DB.characters[k].name}が海賊にさらわれた！ 海賊船の最深部で船長を倒せば取り戻せる。`, true);
   }
+  for (const p of result.possessed) {
+    if (p !== gm.gs.holder) log(`${DB.characters[p].name}が悪魔に取り憑かれた…放置すれば3日で島を去ってしまう。ネオの光か説得で救えるはずだ。`, true);
+  }
   checkEvents();
   renderPhase();
+}
+
+// ============ ドグの店（第7巻8-0: 購入=売値×3）============
+function openDogShop(): void {
+  const stock = ["antidote", "burn_salve", "numb_cure", "plague_cure", "herb_red", "herb_blue", "herb_green", "herb_yellow", "wood", "iron_ore", "rum"];
+  const buyRows = stock.map((id) =>
+    `<button class="small buy-btn" data-id="${id}">${DB.items[id].name} — ${gm.buyPrice(id)}銀貨</button>`).join(" ");
+  const sellables = Object.entries(gm.gs.inventory)
+    .filter(([id, n]) => n > 0 && DB.items[id]?.sell != null && DB.items[id].category !== "key_item");
+  const sellRows = sellables.map(([id, n]) =>
+    `<button class="small sell-btn" data-id="${id}">${DB.items[id].name}×${n} — ${DB.items[id].sell}銀貨で売る</button>`).join(" ");
+  showModal("🏪 海賊商人ドグ",
+    `ドグ「よう、戦いより商売さ。ゆっくり見てきな」（所持: ${gm.gs.silver}銀貨）\n\n【買う（売値の3倍）】\n${buyRows}\n\n【売る】\n${sellRows || "<i>売れるものがない</i>"}`,
+    () => { gm.phase = "map"; renderFieldLoopResume(); });
+  document.querySelectorAll(".buy-btn").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      const id = (b as HTMLElement).dataset.id!;
+      if (gm.buyItem(id)) log(`${DB.items[id].name}を買った。（残り${gm.gs.silver}銀貨）`);
+      else log("銀貨が足りない。");
+      renderHUD();
+    };
+  });
+  document.querySelectorAll(".sell-btn").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      const id = (b as HTMLElement).dataset.id!;
+      if (gm.sellItem(id)) log(`${DB.items[id].name}を売った。（所持${gm.gs.silver}銀貨）`);
+      renderHUD();
+    };
+  });
 }
 
 // ============ Events ============
@@ -744,3 +902,6 @@ function renderGameOver(): void {
 // ============ Boot ============
 renderTitle();
 log("ホープシード ～無人島サバイバルRPG～");
+
+// E2E/デバッグ用フック（ゲームロジックには不使用）
+(window as any).__hopeseed = { gm, getField: () => field };

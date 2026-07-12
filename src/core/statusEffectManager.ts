@@ -1,6 +1,6 @@
-// StatusEffectManager（GDD第16巻20-5）。
-// daily_tick: 毒7日/大出血3日/疫病重症化20%+10%/日 のタイマー死亡（20-8確定）、
-// 昏睡3~5日回復、裏切り3日離脱、空腹減衰・絶食7日死亡。
+// StatusEffectManager（第14巻18-4 戦闘外タイマー・最終値）。
+// 毒7日/大火傷7日/大出血3日/疫病(3日目から重症化20%+10%/日→重症3日で死亡)/
+// 感染症(6日目から5%+5%/日→重症3日・毎日10%伝染)/しびれ移動死30%/肥満/絶食7日。
 
 import { DB } from "../dataLoader.js";
 import type { RNG } from "./rng.js";
@@ -10,8 +10,9 @@ export interface DeathEvent { charId: string; cause: string; }
 export interface DailyTickResult {
   deaths: DeathEvent[];
   recovered: { charId: string; from: string }[];
-  left: string[];       // 裏切り離脱
-  starvation: boolean;  // 全体飢餓死フラグ
+  left: string[];
+  starvation: boolean;
+  infected: string[];   // 伝染発生
 }
 
 export class StatusEffectManager {
@@ -23,18 +24,20 @@ export class StatusEffectManager {
     const t = DB.config.status_timers;
     switch (effect) {
       case "poison": c.status.poison = t.poison_death_days; break;
+      case "burn": c.status.burn = t.burn_death_days; break;
       case "bleed": c.status.bleed = t.bleed_death_days; break;
-      case "plague":
-        c.status.plague = 0;
-        c.status.plague_chance = t.plague_worsen_base;
-        break;
+      case "paralysis": c.status.paralysis = 1; break;
+      case "plague": c.status.plagueDay = 0; break;
+      case "infection": c.status.infectDay = 0; break;
+      case "obesity": c.status.obesity = true; c.status.obesityPlainDays = 0; break;
       case "coma":
         c.comaDaysLeft = this.rng.int(t.coma_recover_min_days, t.coma_recover_max_days);
         c.exclusion = "coma";
+        this.gs.stats.comaTotal++;
         break;
       case "betrayal":
         c.exclusion = "betrayal";
-        c.betrayalDaysLeft = t.betrayal_leave_days;
+        c.betrayalDaysLeft = DB.config.possess.betrayal_leave_days;
         break;
       default: break;
     }
@@ -43,22 +46,36 @@ export class StatusEffectManager {
   cure(charId: string, effect: string): void {
     const c = this.gs.party[charId];
     if (!c) return;
-    delete (c.status as Record<string, unknown>)[effect];
-    if (effect === "plague") delete c.status.plague_chance;
+    const st = c.status;
+    if (effect === "poison") delete st.poison;
+    else if (effect === "burn") delete st.burn;
+    else if (effect === "bleed") delete st.bleed;
+    else if (effect === "paralysis") delete st.paralysis;
+    else if (effect === "plague") { delete st.plagueDay; delete st.plagueSevereDays; }
+    else if (effect === "infection") { delete st.infectDay; delete st.infectSevereDays; }
+    else if (effect === "obesity") { delete st.obesity; delete st.obesityPlainDays; }
+  }
+
+  // 作業コマンド不可判定（大火傷・大出血 = 第7巻9-0）
+  canWork(charId: string): boolean {
+    const c = this.gs.party[charId];
+    if (!c) return false;
+    return !(c.status.burn !== undefined || c.status.bleed !== undefined);
   }
 
   dailyTick(): DailyTickResult {
-    const res: DailyTickResult = { deaths: [], recovered: [], left: [], starvation: false };
+    const res: DailyTickResult = { deaths: [], recovered: [], left: [], starvation: false, infected: [] };
     const t = DB.config.status_timers;
 
     for (const c of Object.values(this.gs.party)) {
       if (c.exclusion === "dead" || c.exclusion === "kidnapped") continue;
+      const st = c.status;
 
-      // 毒・大出血: 残日数を減らし0で死亡
-      for (const k of ["poison", "bleed"] as const) {
-        if (c.status[k] !== undefined) {
-          c.status[k]!--;
-          if (c.status[k]! <= 0) {
+      // 毒・大火傷・大出血: タイマー死亡
+      for (const k of ["poison", "burn", "bleed"] as const) {
+        if (st[k] !== undefined) {
+          st[k]!--;
+          if (st[k]! <= 0) {
             c.exclusion = "dead";
             res.deaths.push({ charId: c.id, cause: k });
           }
@@ -66,19 +83,59 @@ export class StatusEffectManager {
       }
       if (c.exclusion === "dead") continue;
 
-      // 疫病: 重症化判定 20% + 10%/日。重症化=死亡（第14巻詳細未受領のため重症化→死亡と解釈【AI提案】）
-      if (c.status.plague !== undefined) {
-        const chance = c.status.plague_chance ?? t.plague_worsen_base;
-        if (this.rng.chance(chance)) {
-          c.exclusion = "dead";
-          res.deaths.push({ charId: c.id, cause: "plague" });
-          continue;
+      // 疫病: 3日目から重症化判定20%+10%/日→重症のまま3日で死亡
+      if (st.plagueDay !== undefined) {
+        st.plagueDay++;
+        if (st.plagueSevereDays !== undefined) {
+          st.plagueSevereDays++;
+          if (st.plagueSevereDays >= t.plague_severe_death_days) {
+            c.exclusion = "dead";
+            res.deaths.push({ charId: c.id, cause: "plague" });
+            continue;
+          }
+        } else if (st.plagueDay >= t.plague_severe_from_day) {
+          const chance = t.plague_severe_base
+            + t.plague_severe_step * (st.plagueDay - t.plague_severe_from_day);
+          if (this.rng.chance(chance)) st.plagueSevereDays = 0;
         }
-        c.status.plague_chance = chance + t.plague_worsen_per_day;
-        c.status.plague!++;
       }
 
-      // 昏睡: 3~5日で自然回復（薬なし・矛盾#7）
+      // 感染症: 6日目から5%+5%/日→重症3日で死亡・毎日10%で伝染
+      if (st.infectDay !== undefined) {
+        st.infectDay++;
+        if (st.infectSevereDays !== undefined) {
+          st.infectSevereDays++;
+          if (st.infectSevereDays >= t.infect_severe_death_days) {
+            c.exclusion = "dead";
+            res.deaths.push({ charId: c.id, cause: "infection" });
+            continue;
+          }
+        } else if (st.infectDay >= t.infect_severe_from_day) {
+          const chance = t.infect_severe_base
+            + t.infect_severe_step * (st.infectDay - t.infect_severe_from_day);
+          if (this.rng.chance(chance)) st.infectSevereDays = 0;
+        }
+        if (this.rng.chance(t.infect_spread_rate)) {
+          const others = Object.values(this.gs.party).filter(
+            (o) => o.id !== c.id && o.exclusion === "none" && o.status.infectDay === undefined);
+          if (others.length > 0) {
+            const victim = this.rng.pick(others);
+            victim.status.infectDay = 0;
+            res.infected.push(victim.id);
+          }
+        }
+      }
+
+      // 肥満: 粗食7日で解消
+      if (st.obesity) {
+        st.obesityPlainDays = (st.obesityPlainDays ?? 0) + 1;
+        if (st.obesityPlainDays >= t.obesity_plain_days) {
+          delete st.obesity; delete st.obesityPlainDays;
+          res.recovered.push({ charId: c.id, from: "obesity" });
+        }
+      }
+
+      // 昏睡: 3~5日で自然回復（矛盾#7）
       if (c.comaDaysLeft > 0) {
         c.comaDaysLeft--;
         if (c.comaDaysLeft === 0) {
@@ -87,25 +144,60 @@ export class StatusEffectManager {
         }
       }
 
-      // 裏切り: 3日で離脱（矛盾#9）
+      // 裏切り: 3日で離脱
       if (c.exclusion === "betrayal") {
         c.betrayalDaysLeft--;
         if (c.betrayalDaysLeft <= 0) {
-          c.exclusion = "dead"; // 離脱(除外扱い)
+          c.exclusion = "dead";
           res.left.push(c.id);
         }
       }
     }
 
-    // 空腹: 1日で減衰、0が7日続くと死亡（絶食7日・第0巻0-5）
-    this.gs.hunger = Math.max(0, this.gs.hunger - DB.config.hunger.decay_per_day);
+    // 空腹（第14巻18-4: −15%/日・探索日−20%・0%で毎日HP10%減・絶食7日で死亡）
+    const decay = this.gs.exploredToday
+      ? DB.config.hunger.decay_per_day_explore : DB.config.hunger.decay_per_day;
+    this.gs.hunger = Math.max(0, this.gs.hunger - decay);
+    this.gs.exploredToday = false;
     if (this.gs.hunger <= 0) {
       this.gs.starvingDays++;
+      for (const c of Object.values(this.gs.party)) {
+        if (c.exclusion !== "none") continue;
+        c.hp = Math.max(1, c.hp - Math.round(c.maxHp * DB.config.hunger.zero_daily_hp_loss));
+      }
       if (this.gs.starvingDays >= DB.config.hunger.starve_death_days) res.starvation = true;
     } else {
       this.gs.starvingDays = 0;
     }
 
     return res;
+  }
+
+  // 移動時判定: しびれ状態で火山/満潮浅瀬に入ると30%で死亡（第14巻18-4）
+  paralysisMoveCheck(mapId: string, tide: string): DeathEvent[] {
+    const t = DB.config.status_timers;
+    const map = DB.maps[mapId];
+    const dangerous = map?.paralysis_death_zone
+      || (map?.paralysis_death_zone_high_tide && tide === "high");
+    if (!dangerous) return [];
+    const deaths: DeathEvent[] = [];
+    for (const c of Object.values(this.gs.party)) {
+      if (c.exclusion !== "none") continue;
+      if ((c.status.paralysis ?? 0) > 0 && this.rng.chance(t.paralysis_move_death)) {
+        c.exclusion = "dead";
+        deaths.push({ charId: c.id, cause: "paralysis_move" });
+      }
+    }
+    return deaths;
+  }
+
+  // 毒: 移動1エリアごとにHP3%減（第14巻18-4）
+  poisonMoveTick(): void {
+    for (const c of Object.values(this.gs.party)) {
+      if (c.exclusion !== "none") continue;
+      if (c.status.poison !== undefined) {
+        c.hp = Math.max(1, c.hp - Math.max(1, Math.round(c.maxHp * DB.config.status_timers.poison_move_hp_loss)));
+      }
+    }
   }
 }

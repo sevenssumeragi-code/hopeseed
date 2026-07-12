@@ -1,10 +1,18 @@
 {
-  "_source": "第14巻18-9未受領のため【AI提案・要差替】。朝決定(MorningTick)で当日の天候を抽選する。",
+  "_source": "第14巻18-9(正本)。季節=日数帯。嵐の翌日は必ず晴れ(漂着物2倍)。供物期限残り2日は嵐抑制。",
+  "seasons": [
+    {"name":"spring","day_min":1,"day_max":91,"weights":{"clear":50,"cloudy":20,"rain":15,"storm":5,"fog":8,"ash":2}},
+    {"name":"summer","day_min":92,"day_max":183,"weights":{"clear":55,"cloudy":10,"rain":15,"storm":15,"fog":3,"ash":2}},
+    {"name":"autumn","day_min":184,"day_max":274,"weights":{"clear":45,"cloudy":20,"rain":20,"storm":10,"fog":3,"ash":2}},
+    {"name":"winter","day_min":275,"day_max":365,"weights":{"clear":40,"cloudy":25,"rain":15,"storm":5,"fog":13,"ash":2}}
+  ],
   "types": {
-    "clear":  {"name":"晴れ","weight":50,"effects":{}},
-    "cloudy": {"name":"曇り","weight":25,"effects":{}},
-    "rain":   {"name":"雨","weight":15,"effects":{"infection_risk":0.1,"encounter_mult":0.9}},
-    "storm":  {"name":"嵐","weight":7,"effects":{"infection_risk":0.15,"encounter_mult":0.7,"no_sea":true}},
-    "fog":    {"name":"霧","weight":3,"effects":{"encounter_mult":1.2,"hit_penalty":10}}
-  }
+    "clear":  {"name":"晴れ","effects":{}},
+    "cloudy": {"name":"曇り","effects":{}},
+    "rain":   {"name":"雨","effects":{"infection_camp":0.20,"encounter_mult":0.9}},
+    "storm":  {"name":"嵐","effects":{"no_sea":true,"encounter_mult":0.7,"next_day_clear":true,"drift_double_next":true}},
+    "fog":    {"name":"霧","effects":{"hit_penalty":10,"encounter_mult":1.2}},
+    "ash":    {"name":"火山灰","effects":{"volcano_density":1.2}}
+  },
+  "storm_suppress_tribute_days_left": 2
 }

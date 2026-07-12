@@ -1,70 +1,95 @@
 {
-  "_source": "GDD第0巻0-4 矛盾#12【AI提案】のボス5体。詳細数値は第8巻11章未受領のため【AI提案・要差替】。",
+  "_source": "第8巻11章(正本)。boss_lv=max(min_lv, パーティ平均+3)。HPは固定(スケール外)。能力=stat_ref敵の同Lv値×stat_mult。逃走不可・一撃必殺無効・状態異常付与率半減。telegraph=予告行動。",
+
+  "volcano_lord": {
+    "name": "火山の主", "family": "fire_monster", "boss": true,
+    "min_lv": 25, "hp_fixed": 900,
+    "stat_ref": "flame_beast", "stat_mult": {"atk":1.3,"def":1.2,"spd":0.7},
+    "exp_base": 16,
+    "unlock": {"day_min":90,"tributes_fire_min":3},
+    "skills": [
+      {"name":"大噴石","accuracy":75,"power":3.0,"effects":[]},
+      {"name":"地殻割り","accuracy":90,"power":1.2,"target":"all","effects":[{"type":"paralysis","chance":0.20}]},
+      {"name":"マグマブレス","accuracy":80,"power":2.0,"target":"all","telegraph":"主が大きく息を吸い込んだ……！","effects":[{"type":"burn","chance":0.40}]}
+    ],
+    "ai_plan": {"type":"volcano_lord","breath_below_hp":0.7,"breath_cycle":3,"rage_below_hp":0.3,"rage_atk_stage":2},
+    "drops": [{"item":"flame_horn","rate":1.0}],
+    "victory": "hp_zero",
+    "location": "volcano"
+  },
 
   "pirate_captain": {
     "name": "海賊船長", "family": "pirate", "boss": true,
-    "base": {"hp":320,"atk":26,"def":14,"spd":11,"skl":12,"eva":6},
-    "ai": "boss_pirate", "exp_base": 120,
-    "victory": "rescue_kidnapped_all",
+    "min_lv": 20, "hp_fixed": 700,
+    "stat_ref": "pirate_ship_crew", "stat_mult": {"atk":1.2,"def":1.1,"spd":1.0},
+    "exp_base": 16,
+    "unlock": {},
     "skills": [
-      {"name":"大回転斬り","accuracy":85,"power":2.0,"target":"all","effects":[]},
-      {"name":"号令","accuracy":100,"power":null,"effects":[{"type":"buff","stats":["atk"],"stage":1,"turns":3}]}
+      {"name":"カットラス","accuracy":90,"power":1.3,"effects":[]},
+      {"name":"舵輪殴打","accuracy":85,"power":1.5,"target":"all","effects":[]},
+      {"name":"宝剣一閃","accuracy":80,"power":2.5,"effects":[{"type":"bleed","chance":0.20}]},
+      {"name":"手下を呼ぶ","accuracy":100,"power":null,"once":true,"effects":[{"type":"summon","enemy":"pirate_ship_crew","count":2}]}
     ],
-    "drops": [{"item":"captain_saber","rate":1.0}],
-    "location": "pirate_ship"
+    "ai_plan": {"type":"pirate_captain","summon_by_turn":2,"smash_cycle":3,"stance_below_hp":0.4,"stance_stages":{"atk":1,"def":1}},
+    "drops": [{"item":"captain_sword","rate":1.0},{"item":"treasure","rate":1.0},{"item":"treasure","rate":1.0},{"item":"treasure","rate":1.0}],
+    "silver_reward": 50,
+    "victory": "rescue_kidnapped_all",
+    "location": "pirate_ship",
+    "on_defeat": {"stop_island_pirates": true}
   },
 
-  "demon_lord": {
-    "name": "悪魔の首魁", "family": "demon", "boss": true,
-    "base": {"hp":400,"atk":30,"def":16,"spd":13,"skl":14,"eva":8},
-    "ai": "boss_demon", "exp_base": 200,
-    "weakness": "anti_demon",
-    "victory": "hp_zero",
+  "deep_sea_nushi": {
+    "name": "深海のヌシ", "family": "giant_fish", "boss": true,
+    "min_lv": 40, "hp_fixed": 1000,
+    "stat_ref": "shark", "stat_mult": {"atk":1.4,"def":1.1,"spd":1.2},
+    "exp_base": 22,
+    "unlock": {"day_min":150,"shark_kills_min":5,"tide":"high"},
+    "tide_exempt": true,
     "skills": [
-      {"name":"闇の奔流","accuracy":85,"power":2.2,"target":"all","effects":[]},
-      {"name":"取り憑き","accuracy":50,"power":null,"target":"single","effects":[{"type":"possess"}]}
+      {"name":"高波","accuracy":90,"power":1.0,"target":"all","effects":[{"type":"paralysis","chance":0.20}]},
+      {"name":"大渦","accuracy":80,"power":2.0,"target":"all","effects":[]},
+      {"name":"丸呑み","accuracy":55,"power":null,"telegraph":"ヌシが大きく口を開けた……！","effects":[{"type":"instant_death","guard_negates":true,"protect_negates":true,"renny_immune":true}]}
     ],
-    "drops": [{"item":"demon_core","rate":1.0}],
-    "location": "wasteland"
+    "ai_plan": {"type":"nushi","cycle":["高波","telegraph","丸呑み"],"whirl_below_hp":0.5},
+    "drops": [{"item":"nushi_fang","rate":1.0},{"item":"caviar","rate":1.0},{"item":"caviar","rate":1.0},{"item":"caviar","rate":1.0},{"item":"fish","rate":1.0},{"item":"fish","rate":1.0},{"item":"fish","rate":1.0},{"item":"fish","rate":1.0},{"item":"fish","rate":1.0}],
+    "victory": "hp_zero",
+    "location": "shallows"
   },
 
   "nightmare_king": {
     "name": "夢魔の王", "family": "nightmare", "boss": true,
-    "base": {"hp":350,"atk":24,"def":12,"spd":15,"skl":16,"eva":12},
-    "ai": "boss_nightmare", "exp_base": 160,
-    "victory": "hp_zero",
+    "min_lv": 50, "hp_fixed": 1100,
+    "stat_ref": "nightmare", "stat_mult": {"atk":1.3,"def":1.2,"spd":1.1},
+    "exp_base": 18,
+    "unlock": {"day_min":200,"coma_count_min":3},
+    "special_rule": {"party":"holder_plus_top2_trust","defeat_penalty":"coma_2days_no_death"},
     "skills": [
-      {"name":"深き悪夢","accuracy":75,"power":1.8,"target":"all","effects":[{"type":"paralysis","chance":0.30}]},
-      {"name":"眠りの呪い","accuracy":60,"power":null,"effects":[{"type":"coma_battle"}]}
+      {"name":"夢喰い","accuracy":75,"power":2.5,"effects":[]},
+      {"name":"悪夢の鎖","accuracy":85,"power":null,"effects":[{"type":"sleep_skip","chance":1.0}]},
+      {"name":"絶望の囁き","accuracy":100,"power":null,"target":"all","effects":[{"type":"protect_rate","amount":-20,"turns":3}]}
     ],
-    "drops": [{"item":"dream_crown","rate":1.0}],
-    "location": "dream"
+    "ai_plan": {"type":"nightmare_king","open_whisper":true,"holder_hate":2.0,"chain_below_hp":0.5},
+    "drops": [{"item":"dream_crystal","rate":1.0}],
+    "victory": "hp_zero",
+    "location": "dream",
+    "on_defeat": {"dream_rate_mult": 0.5}
   },
 
-  "volcano_lord": {
-    "name": "火山の主", "family": "fire_monster", "boss": true,
-    "base": {"hp":500,"atk":32,"def":20,"spd":9,"skl":11,"eva":4},
-    "ai": "boss_volcano", "exp_base": 240,
-    "victory": "hp_zero",
+  "demon_lord": {
+    "name": "悪魔の首魁", "family": "demon", "boss": true,
+    "min_lv": 55, "hp_fixed": 1500,
+    "stat_ref": "demon", "stat_mult": {"atk":1.4,"def":1.3,"spd":1.2},
+    "exp_base": 20,
+    "unlock": {"day_fixed":350},
+    "light_damage_mult": 2.0,
     "skills": [
-      {"name":"噴火","accuracy":90,"power":2.5,"target":"all","effects":[{"type":"burn","chance":0.40}]},
-      {"name":"溶岩の壁","accuracy":100,"power":null,"effects":[{"type":"buff","stats":["def"],"stage":2,"turns":3}]}
+      {"name":"闇の暴風","accuracy":85,"power":2.0,"target":"all","effects":[]},
+      {"name":"強憑依","accuracy":100,"power":null,"cooldown":2,"effects":[{"type":"possess","chance":0.35}]},
+      {"name":"希望喰らい","accuracy":100,"power":null,"target":"holder","telegraph":"首魁の目が{holder}を捉えた……！","effects":[{"type":"hope_devour","protect_negates":true}]}
     ],
-    "drops": [{"item":"magma_heart","rate":1.0}],
-    "location": "volcano"
-  },
-
-  "deep_sea_nushi": {
-    "name": "深海の巨大魚ヌシ", "family": "giant_fish", "boss": true,
-    "base": {"hp":600,"atk":34,"def":18,"spd":16,"skl":13,"eva":10},
-    "ai": "boss_nushi", "exp_base": 300,
+    "ai_plan": {"type":"demon_lord","form2_below_hp":0.5,"form2_atk_stage":1,"devour_cycle":3},
+    "drops": [{"item":"overlord_core","rate":1.0}],
     "victory": "hp_zero",
-    "tide_exempt": true,
-    "skills": [
-      {"name":"大津波","accuracy":85,"power":2.6,"target":"all","effects":[]},
-      {"name":"丸呑み","accuracy":45,"power":null,"effects":[{"type":"instant_death"}]}
-    ],
-    "drops": [{"item":"nushi_scale","rate":1.0}],
-    "location": "shrine_islet"
+    "location": "route_final"
   }
 }

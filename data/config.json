@@ -1,5 +1,5 @@
 {
-  "_source": "GDD第0巻0-5 グローバル定数 / 第16巻20-8 受け入れテスト / 第16巻20-6 ダメージ計算正本。第14巻18-12の全キー未受領のため一部は【AI提案・要差替】。",
+  "_source": "第14巻18-12(config原本・最終チューニング値)+第0巻0-5+第16巻20-8。全キー正データ。",
   "DAY_MAX": 365,
   "PARTY_MAX": 6,
   "PARTY_MAX_WITH_HIDDEN": 7,
@@ -19,21 +19,27 @@
   "hunger": {
     "starve_death_days": 7,
     "max_gauge": 100,
-    "decay_per_day": 20,
-    "meal_restore": 40
+    "decay_per_day": 15,
+    "decay_per_day_explore": 20,
+    "meal_restore": 40,
+    "low_threshold_no_sp": 30,
+    "zero_daily_hp_loss": 0.10
   },
 
+  "exp": { "level_coef": 15, "level_pow": 1.7, "enemy_coef": 0.5, "reserve_ratio": 0.3 },
+
+  "enemy_scaling": { "hp_per_lv": 0.10, "stat_per_lv": 0.08 },
+
   "time_slots": ["morning", "noon", "evening", "night"],
+  "tide_high_slots": ["evening", "night"],
   "demon_spawn_slots": ["night"],
   "demon_spawn_areas": ["wasteland", "grassland", "beach"],
 
-  "level_bands": {
-    "basic_skill": [1, 20],
-    "upper_skill": [21, 40],
-    "ultimate_skill": [41, 60],
-    "enhance_only": [61, 99]
+  "enhance": {
+    "start_level": 60, "step_levels": 5, "max_stage": 8,
+    "power_mult_per_step": 1.03, "acc_per_step": 1,
+    "sp_reduce_per_step": 1, "sp_floor_ratio": 0.6, "sp_floor_min": 3
   },
-  "enhance": { "start_level": 60, "step_levels": 5, "power_mult_per_step": 1.03 },
 
   "damage": {
     "def_factor": 0.5,
@@ -42,75 +48,126 @@
     "guard_mult": 0.5,
     "protected_mult": 0.5,
     "geru_leadership_mult": 1.4,
-    "weakness_mult": 0.7,
-    "weakness_mult_soft": 0.8,
+    "neo_magic_blade_mult": 1.4,
+    "weakness_stat_mult": 0.7,
     "min_damage": 1,
     "buff_stage_cap": 2,
-    "buff_stage_mult": 0.25
+    "buff_up_mult": 1.25,
+    "buff_down_mult": 0.8,
+    "buff_turns": 3
   },
 
-  "hit": {
-    "base_from_skill": true,
-    "eva_factor": 1.0,
-    "min_hit": 5,
-    "max_hit": 100
-  },
+  "hit": { "eva_factor": 1.0, "min_hit": 5, "max_hit": 100 },
 
-  "protect": {
-    "base_rate": 50,
-    "skill_factor": 0.3,
-    "trust_factor": 0.3,
-    "cap": 95
-  },
+  "protect": { "base_rate": 50, "skill_factor": 0.3, "trust_factor": 0.3, "cap": 95 },
 
   "kidnap": {
     "rate": 0.10,
+    "max_tries_per_battle": 2,
     "only_downed": true,
-    "negated_by_protect": true
+    "negated_by_protect": true,
+    "pirate_active_from_day": 40
   },
+
+  "possess": {
+    "rate_base": 0.25,
+    "rate_boss": 0.35,
+    "cooldown_turns_base": 3,
+    "cooldown_turns_boss": 2,
+    "neo_bonus": 0.15,
+    "betrayal_leave_days": 3
+  },
+
+  "dream": {
+    "rate_base": 0.02, "rate_renny": 0.05, "active_from_day": 100,
+    "recent_coma_bonus": 0.02, "king_defeat_mult": 0.5
+  },
+
+  "night_raid": { "phases": [[61, 0.08], [200, 0.12], [301, 0.15]] },
 
   "tide": {
     "shallows_high_tide_force_end_turns": 8,
     "high_tide_enemy_multiplier": 2.0,
-    "boss_nushi_exempt": true,
-    "cycle_days": 1
+    "boss_nushi_exempt": true
   },
 
   "status_timers": {
     "poison_death_days": 7,
+    "burn_death_days": 7,
     "bleed_death_days": 3,
-    "plague_worsen_base": 0.20,
-    "plague_worsen_per_day": 0.10,
+    "poison_move_hp_loss": 0.03,
+    "plague_severe_from_day": 3,
+    "plague_severe_base": 0.20,
+    "plague_severe_step": 0.10,
+    "plague_severe_death_days": 3,
+    "plague_craft_penalty": 20,
+    "infect_severe_from_day": 6,
+    "infect_severe_base": 0.05,
+    "infect_severe_step": 0.05,
+    "infect_severe_death_days": 3,
+    "infect_spread_rate": 0.10,
+    "infect_rain_camp": 0.20,
+    "infect_raw_water": 0.10,
+    "infect_untreated_bleed": 0.05,
+    "paralysis_move_death": 0.30,
+    "paralysis_death_areas": ["volcano", "shallows_high_tide"],
     "coma_recover_min_days": 3,
     "coma_recover_max_days": 5,
-    "betrayal_leave_days": 3
+    "obesity_chance_poor_food": 0.15,
+    "obesity_plain_days": 7
   },
 
   "sp": {
     "sleep_restore_full": true,
-    "meal_restore_ratio": 0.3,
+    "meal_ratio_great": 0.5,
+    "meal_ratio_normal": 0.25,
+    "meal_ratio_poor": 0.10,
     "battle_win_restore": 4
   },
 
+  "craft": {
+    "great_coef": 0.35,
+    "fail_floor": 5,
+    "fail_base": 40,
+    "geru_holder_bonus": 15,
+    "muni_assist_bonus": 5,
+    "food_expire_days": 3,
+    "food_hp_great": 1.0,
+    "food_hp_normal": 0.5,
+    "food_hp_poor": 0.3334,
+    "treatment_pain_hp": 0.05
+  },
+
+  "gather": {
+    "respawn_days_default": 2,
+    "respawn_days_herb": 3,
+    "respawn_days_rare": 7,
+    "double_at_skill": 50,
+    "stack_max": 99
+  },
+
+  "economy": { "buy_mult": 3, "pirate_silver_min": 5, "pirate_silver_max": 15, "silver_min": 1, "silver_max": 5 },
+
   "trust": {
-    "min": 0,
-    "max": 100,
+    "min": 0, "max": 100,
     "muni_holder_mult": 1.5,
+    "demon_kill_all_pairs": 2,
     "protect_special_thresholds": [3, 7, 15]
   },
 
   "ending": {
     "true_ending": {
-      "exclusions_max": 0,
-      "trust_avg_min": 80,
-      "core_events_required": 7,
-      "hidden_flag_required": true
+      "exclusions_max": 0, "trust_avg_min": 80,
+      "core_events_required": 7, "hidden_flag_required": true
     }
   },
 
-  "battle": {
-    "flee_base_rate": 50,
-    "max_turns_safety": 999
+  "battle": { "flee_base_rate": 50, "flee_lv_diff_coef": 3, "max_turns_safety": 999 },
+
+  "bosses_meta": {
+    "volcano_lord_from_day": 90, "nushi_from_day": 150, "nushi_shark_kills": 5,
+    "nightmare_king_from_day": 200, "nightmare_king_coma_count": 3,
+    "demon_lord_day": 350, "goddess_join_from_day": 240
   },
 
   "rng_seed_default": 12345

@@ -1,8 +1,6 @@
-// GameManager（GDD第16巻20-5: FSMの親。日付・フェーズの唯一の権威）。
-// 20-4-1: Title→Prologue→HolderSelect→DayLoop(MorningTick→Base/Map/Battle⇄→SleepTick)
-//         →Day365 EndingJudge→Ending。どこからでもGameOverへ遷移可（GO5条件）。
+// GameManager（GDD第16巻20-5: FSMの親）+ 第7・8・14巻の正データ対応。
 
-import { DB } from "../dataLoader.js";
+import { DB, getEnemyDef } from "../dataLoader.js";
 import { RNG } from "./rng.js";
 import { PartyManager, createCharacterState } from "./partyManager.js";
 import { TrustManager } from "./trustManager.js";
@@ -18,7 +16,7 @@ import {
   BattleManager, type BattleContext, type BattleResult,
 } from "./battle/battleManager.js";
 import type {
-  CharacterState, GameState, GOReason, TimeSlot, Tide,
+  CharacterState, FoodStockEntry, GameState, GOReason, TimeSlot, Tide,
 } from "../types.js";
 
 export type GamePhase =
@@ -27,6 +25,12 @@ export type GamePhase =
   | "ending" | "gameover";
 
 const HOLDER_CANDIDATES = ["renny", "hyu", "jinpachi", "muni", "geru", "neo"];
+
+// エリア別敵Lv補正（第4巻5-10-3未受領のため【AI提案・要差替】）
+const AREA_LV_MOD: Record<string, number> = {
+  forest_lake: 0, grassland: 0, beach: 1, wasteland: 2,
+  volcano: 3, shallows: 2, shrine_islet: 2, pirate_ship: 2, dream: 0,
+};
 
 export class GameManager {
   gs!: GameState;
@@ -46,34 +50,37 @@ export class GameManager {
 
   currentBattle: BattleManager | null = null;
   lastEndingId: string | null = null;
+  pendingNightRaid = false;
 
-  // --- HolderSelect: 6人から1人・変更不可（掟）---
   newGame(holderId: string, seed?: number): void {
-    if (!HOLDER_CANDIDATES.includes(holderId)) {
-      throw new Error(`invalid holder: ${holderId}`);
-    }
+    if (!HOLDER_CANDIDATES.includes(holderId)) throw new Error(`invalid holder: ${holderId}`);
     const rngSeed = seed ?? DB.config.rng_seed_default;
     this.rng = new RNG(rngSeed);
 
     const party: Record<string, CharacterState> = {};
     for (const id of HOLDER_CANDIDATES) party[id] = createCharacterState(id);
-    // 隠しキャラ（湖の女神）は goddess_joined フラグで後から加入
 
     this.gs = {
-      day: 1, slot: "morning", tide: "low", weather: "clear",
+      day: 1, slot: "morning", tide: "low", weather: "clear", prevWeather: "clear",
       holder: holderId, location: "base",
       party, flags: { [`route_${holderId}`]: true },
-      inventory: { raw_meat: 2, fish: 2, herb_leaf: 3, hopeseed: 1 },
+      inventory: { meat: 2, fish: 2, nuts: 3, herb_green: 2, herb_red: 1, wood: 2, grass_fiber: 2, hopeseed: 1 },
+      foodStock: [],
+      silver: 0,
       trust: TrustManager.initTrust(),
-      tribute: { fireLastDay: 1, waterLastDay: 1 },
+      tribute: { fireLastDay: 1, waterLastDay: 1, fireCount: 0, waterCount: 0 },
       hunger: DB.config.hunger.max_gauge,
       starvingDays: 0,
+      exploredToday: false,
       reviveLastDay: 0,
-      stats: { battlesWon: 0, cooked: 0, built: 0, brewed: 0, revived: 0, protectSuccess: 0 },
+      stats: {
+        battlesWon: 0, cooked: 0, built: 0, brewed: 0,
+        revived: 0, protectSuccess: 0, sharkKills: 0, comaTotal: 0,
+      },
       achievements: [],
       gameOver: null,
       rngSeed,
-      version: 1,
+      version: 2,
     };
     this.bindManagers();
     this.phase = "base";
@@ -86,7 +93,7 @@ export class GameManager {
     this.tribute = new TributeManager(this.gs);
     this.statusFx = new StatusEffectManager(this.gs, this.rng);
     this.events = new EventManager(this.gs, this.trust);
-    this.craft = new CraftManager(this.gs);
+    this.craft = new CraftManager(this.gs, this.rng);
     this.endingJudge = new EndingJudge(this.gs, this.party, this.trust, this.events);
     this.achievements = new AchievementManager(this.gs, this.trust);
   }
@@ -101,26 +108,25 @@ export class GameManager {
     return true;
   }
 
-  // --- 時間帯を進める（移動/作業のコスト消費）---
   advanceTime(slots: number): void {
     const order: TimeSlot[] = DB.config.time_slots;
     for (let i = 0; i < slots; i++) {
       const idx = order.indexOf(this.gs.slot);
-      if (idx >= order.length - 1) {
-        this.endDay();
-        return;
-      }
+      if (idx >= order.length - 1) { this.endDay(); return; }
       this.gs.slot = order[idx + 1];
+      this.updateTide();
     }
   }
 
-  // --- SleepTick→翌日（20-4-1）---
+  // 潮汐: 夕・夜=満潮（第14巻TIDE_HIGH_SLOTS）
+  private updateTide(): void {
+    this.gs.tide = (DB.config.tide_high_slots as string[]).includes(this.gs.slot) ? "high" : "low";
+  }
+
   endDay(): void {
     if (this.phase === "gameover" || this.phase === "ending") return;
-
-    // SleepTick: 夢魔判定→回復→オートセーブ
     this.sleepTick();
-    if (this.phase !== "base" && (this.phase as GamePhase) === "gameover") return;
+    if ((this.phase as GamePhase) === "gameover") return;
 
     if (this.gs.day >= DB.config.DAY_MAX) {
       this.phase = "ending";
@@ -129,93 +135,181 @@ export class GameManager {
       this.achievements.check(ed.id);
       return;
     }
-
     this.gs.day++;
     this.gs.slot = "morning";
+    this.updateTide();
     this.morningTick();
   }
 
-  // --- MorningTick: 天候決定/タイマー進行/イベント判定（20-4-1）---
   morningTick(): void {
-    this.gs.weather = this.weather.rollDaily(this.rng);
-    // 潮汐: 1日周期で干潮⇔満潮（第0巻0-3-3）
-    this.gs.tide = this.gs.day % 2 === 1 ? "low" : "high";
+    // 天候（第14巻18-9: 季節・嵐翌日晴れ・供物期限前は嵐抑制）
+    const tributeLeft = Math.min(this.tribute.remainingDays("fire"), this.tribute.remainingDays("water"));
+    this.gs.prevWeather = this.gs.weather;
+    this.gs.weather = this.weather.rollDaily(this.rng, this.gs.day, this.gs.prevWeather, tributeLeft);
 
-    // 状態異常・空腹の日次タイマー
+    // 食料の期限切れ（保存3日・第7巻8-2）
+    this.gs.foodStock = this.gs.foodStock.filter(
+      (f) => this.gs.day - f.madeDay < DB.config.craft.food_expire_days);
+
     const tick = this.statusFx.dailyTick();
     for (const d of tick.deaths) {
-      if (d.charId === this.gs.holder) {
-        this.triggerGameOver("holder_death");
-        return;
-      }
+      if (d.charId === this.gs.holder) { this.triggerGameOver("holder_death"); return; }
     }
-    if (tick.starvation) {
-      // 絶食7日→死亡。全体空腹管理のため保持者死亡としてGO（第0巻0-5【AI提案・解釈】）
-      this.triggerGameOver("holder_death");
-      return;
-    }
+    if (tick.starvation) { this.triggerGameOver("holder_death"); return; }
 
-    // 供物期限判定（GO4/GO5）
     const expired = this.tribute.checkExpiry();
-    if (expired) {
-      this.triggerGameOver(expired);
-      return;
-    }
+    if (expired) { this.triggerGameOver(expired); return; }
     this.achievements.check();
   }
 
   private sleepTick(): void {
-    // 夢魔遭遇判定（就寝時・第0巻0-3-3。キャラ別遭遇率はweaknessから）
-    for (const c of this.party.getActiveMembers()) {
-      const def = DB.characters[c.id];
-      if (def.weakness.type === "dream_coma") {
-        const m = def.weakness.detail.match(/([\d.]+)/);
-        const rate = m ? Number(m[1]) : 0;
+    // 夜襲判定（第14巻18-6: 61日目〜8%→200日〜12%→301日〜15%）
+    this.pendingNightRaid = false;
+    let raidRate = 0;
+    for (const [fromDay, rate] of DB.config.night_raid.phases as [number, number][]) {
+      if (this.gs.day >= fromDay) raidRate = rate;
+    }
+    if (raidRate > 0 && this.rng.chance(raidRate)) this.pendingNightRaid = true;
+
+    // 夢魔遭遇判定（第14巻18-7: 100日目以降2%/レニィ5%・王撃破後半減）
+    if (this.gs.day >= DB.config.dream.active_from_day) {
+      for (const c of this.party.getActiveMembers()) {
+        let rate = c.id === "renny" ? DB.config.dream.rate_renny : DB.config.dream.rate_base;
+        if (this.gs.flags["nightmare_king_defeated"]) rate *= DB.config.dream.king_defeat_mult;
         if (this.rng.chance(rate)) {
-          // 夢魔敗北→昏睡（簡易判定: 実戦闘は夢の中マップで行う設計。ここでは遭遇=昏睡リスク）
           this.statusFx.apply(c.id, "coma", "nightmare");
+          break; // 一晩に1人
         }
       }
     }
-    // 就寝回復: SP全回復・HP半回復（矛盾#10採用）
+
+    // 雨天野宿の感染症（第14巻18-4: 20%）— 拠点泊は屋根ありとして半減【AI提案】
+    const wx = this.weather.effects(this.gs.weather);
+    if (wx.infection_camp && this.rng.chance((wx.infection_camp as number) * 0.5)) {
+      const targets = this.party.getActiveMembers();
+      if (targets.length > 0) {
+        this.statusFx.apply(this.rng.pick(targets).id, "infection", "rain_camp");
+      }
+    }
+
     for (const c of this.party.getActiveMembers()) {
       if (DB.config.sp.sleep_restore_full) c.sp = c.maxSp;
       c.hp = Math.min(c.maxHp, c.hp + Math.round(c.maxHp * 0.5));
       c.buffs = {};
+      c.buffTurns = {};
+      c.hitDebuff = 0; c.hitDebuffTurns = 0;
+      c.protectRateBuff = 0; c.protectRateTurns = 0;
     }
     this.save.autosave(this.gs);
   }
 
-  // --- 食事（拠点）: 空腹回復＋SP一部回復 ---
-  eat(itemId: string): boolean {
-    const item = DB.items[itemId];
-    if (!item || item.category !== "food" || (this.gs.inventory[itemId] ?? 0) < 1) return false;
-    this.gs.inventory[itemId]--;
+  // ============ 食事（品質別・第7巻8-2）============
+  eatDish(stockIndex: number, eaterId?: string): { ok: boolean; message: string } {
+    const entry = this.gs.foodStock[stockIndex];
+    if (!entry) return { ok: false, message: "その料理はもうない。" };
+    const item = DB.items[entry.dishId];
+    this.gs.foodStock.splice(stockIndex, 1);
+
+    // 満腹+40%（品質問わず）
     this.gs.hunger = Math.min(DB.config.hunger.max_gauge,
-      this.gs.hunger + (item.hunger_restore ?? DB.config.hunger.meal_restore));
-    for (const c of this.party.getActiveMembers()) {
-      if (item.hp_restore) c.hp = Math.min(c.maxHp, c.hp + item.hp_restore);
-      if (item.sp_restore) c.sp = Math.min(c.maxSp, c.sp + item.sp_restore);
+      this.gs.hunger + DB.config.hunger.meal_restore);
+
+    const hpRatio = entry.quality === "great" ? DB.config.craft.food_hp_great
+      : entry.quality === "normal" ? DB.config.craft.food_hp_normal
+      : DB.config.craft.food_hp_poor;
+    const spRatio = entry.quality === "great" ? DB.config.sp.meal_ratio_great
+      : entry.quality === "normal" ? DB.config.sp.meal_ratio_normal
+      : DB.config.sp.meal_ratio_poor;
+
+    const special = item.special ?? {};
+    const eaters = special["party_heal"] ? this.party.getActiveMembers()
+      : [this.gs.party[eaterId ?? this.gs.holder]];
+
+    let msg = entry.quality === "great" ? `「${item.great_name}」を味わった！` : `${item.name}を食べた。`;
+    for (const c of eaters) {
+      if (!c) continue;
+      c.hp = Math.min(c.maxHp, c.hp + Math.round(c.maxHp * hpRatio));
+      if (special["sp_full"]) c.sp = c.maxSp;
+      else c.sp = Math.min(c.maxSp, c.sp + Math.round(c.maxSp * spRatio));
+      if (special["atk_buff_next_battle"]) c.atkBuffNextBattle = special["atk_buff_next_battle"] as number;
+      // かろうじて食べれる物: 15%で肥満
+      if (entry.quality === "poor" && this.rng.chance(DB.config.status_timers.obesity_chance_poor_food)) {
+        this.statusFx.apply(c.id, "obesity", "poor_food");
+        msg += `　${DB.characters[c.id].name}は肥満になってしまった…`;
+      }
+      // クラゲの酢の物(失敗品): 10%でしびれ
+      if (entry.quality === "poor" && special["fail_paralysis"]
+        && this.rng.chance(special["fail_paralysis"] as number)) {
+        this.statusFx.apply(c.id, "paralysis", "jellyfish");
+        msg += `　${DB.characters[c.id].name}の口がしびれた！`;
+      }
+      // 肥満中に great/normal を食べたら粗食リセット
+      if (c.status.obesity && entry.quality !== "poor") c.status.obesityPlainDays = 0;
     }
-    return true;
+    if (special["plague_resist"]) this.gs.flags["plague_resist_today"] = true;
+    return { ok: true, message: msg };
   }
 
-  // --- 移動（マップ移動フェーズ）---
-  moveTo(mapId: string): boolean {
+  // 生食（木の実HP10%回復・キノコ10%毒・第7巻8-1）
+  eatRaw(itemId: string, eaterId: string): { ok: boolean; message: string } {
+    const item = DB.items[itemId];
+    if (!item || (this.gs.inventory[itemId] ?? 0) < 1) return { ok: false, message: "持っていない。" };
+    const c = this.gs.party[eaterId];
+    if (!c) return { ok: false, message: "誰が食べる？" };
+    if (!item.raw_edible && !item.raw_risk) return { ok: false, message: "生では食べられない。調理が必要だ。" };
+    this.gs.inventory[itemId]--;
+    this.gs.hunger = Math.min(DB.config.hunger.max_gauge, this.gs.hunger + 10);
+    let msg = `${item.name}をかじった。`;
+    if (item.raw_edible) {
+      c.hp = Math.min(c.maxHp, c.hp + Math.round(c.maxHp * item.raw_edible.hp_ratio));
+    }
+    if (item.raw_risk?.["poison"] && this.rng.chance(item.raw_risk["poison"])) {
+      this.statusFx.apply(eaterId, "poison", "raw_mushroom");
+      msg += `　${DB.characters[eaterId].name}は毒にあたった！`;
+    }
+    return { ok: true, message: msg };
+  }
+
+  // 薬の使用（フィールド/拠点）
+  useMedicine(itemId: string, targetId: string): { ok: boolean; message: string } {
+    const item = DB.items[itemId];
+    if (!item?.cure || (this.gs.inventory[itemId] ?? 0) < 1) return { ok: false, message: "使えない。" };
+    this.gs.inventory[itemId]--;
+    for (const cure of item.cure) this.statusFx.cure(targetId, cure);
+    return { ok: true, message: `${DB.characters[targetId].name}に${item.name}を使った。` };
+  }
+
+  // ============ 移動 ============
+  moveTo(mapId: string): { ok: boolean; deaths: string[] } {
     const current = DB.maps[this.gs.location];
-    if (!current.connections.includes(mapId)) return false;
+    if (!current.connections.includes(mapId)) return { ok: false, deaths: [] };
+    // 海賊船は小舟の修理材が必要（第7巻8-7）
+    const req = current.requires_for?.[mapId];
+    if (req && (this.gs.inventory[req] ?? 0) < 1 && !this.gs.flags[`used_${req}`]) {
+      return { ok: false, deaths: [] };
+    }
+    if (req && (this.gs.inventory[req] ?? 0) >= 1) {
+      this.gs.inventory[req]--;
+      this.gs.flags[`used_${req}`] = true;
+    }
     this.gs.location = mapId;
+    this.gs.exploredToday = true;
     this.phase = DB.maps[mapId].is_base ? "base" : "map";
+    // 毒の移動ダメージ＋しびれ移動死判定（第14巻18-4）
+    this.statusFx.poisonMoveTick();
+    const deaths = this.statusFx.paralysisMoveCheck(mapId, this.gs.tide);
+    for (const d of deaths) {
+      if (d.charId === this.gs.holder) this.triggerGameOver("holder_death");
+    }
     this.advanceTime(1);
-    return true;
+    return { ok: true, deaths: deaths.map((d) => d.charId) };
   }
 
-  // --- 戦闘開始（参加メンバー選択・最大4人）---
+  // ============ 戦闘 ============
   startBattle(enemyIds: string[], memberIds: string[], isBoss = false, bossId?: string): BattleManager {
     const members = memberIds
       .map((id) => this.gs.party[id])
       .filter((c) => c && c.exclusion === "none" && c.comaDaysLeft === 0);
-    // 保持者はマップ移動の操作キャラ＝戦闘に必ず帯同（掟）
     if (!members.some((m) => m.id === this.gs.holder)) {
       throw new Error("holder must join the battle party");
     }
@@ -223,9 +317,9 @@ export class GameManager {
       location: this.gs.location,
       slot: this.gs.slot,
       tide: this.gs.tide as Tide,
-      isBoss,
-      bossId,
+      isBoss, bossId,
       weatherHitPenalty: (this.weather.effects(this.gs.weather).hit_penalty as number) ?? 0,
+      areaLvMod: AREA_LV_MOD[this.gs.location] ?? 0,
     };
     this.currentBattle = new BattleManager(
       enemyIds, members, this.gs.holder, ctx, this.rng,
@@ -235,41 +329,57 @@ export class GameManager {
     return this.currentBattle;
   }
 
-  // --- 戦闘後処理 ---
   settleBattle(): BattleResult {
     if (!this.currentBattle) throw new Error("no battle in progress");
-    const result = this.currentBattle.settle();
+    const b = this.currentBattle;
+    const result = b.settle();
+
+    this.gs.stats.sharkKills += result.sharkKills;
 
     if (result.outcome === "victory") {
       this.gs.stats.battlesWon++;
+      this.gs.silver += result.silver;
       for (const item of result.drops) {
-        this.gs.inventory[item] = (this.gs.inventory[item] ?? 0) + 1;
+        this.gs.inventory[item] = Math.min(DB.config.gather.stack_max,
+          (this.gs.inventory[item] ?? 0) + 1);
       }
-      // 共闘の信頼度（battle_together）
-      const ids = this.currentBattle.allies.map((a) => a.state.id);
+      const ids = b.allies.map((a) => a.state.id);
       for (let i = 0; i < ids.length; i++) {
         for (let j = i + 1; j < ids.length; j++) {
           this.trust.add(ids[i], ids[j], DB.trust.gain.battle_together, "battle_together");
         }
       }
-      // 海賊船長撃破→誘拐された仲間全員救出（矛盾#8）
-      if (this.currentBattle.ctx.bossId === "pirate_captain") {
-        for (const c of Object.values(this.gs.party)) {
-          if (c.exclusion === "kidnapped") {
-            c.exclusion = "none";
-            c.downed = false;
-            c.hp = Math.max(1, Math.round(c.maxHp * 0.5));
+      // 悪魔撃破: 参加者全ペア信頼度+2（第8巻10-7）
+      if (b.enemies.some((e) => e.def.family === "demon")) {
+        for (let i = 0; i < ids.length; i++) {
+          for (let j = i + 1; j < ids.length; j++) {
+            this.trust.add(ids[i], ids[j], DB.config.trust.demon_kill_all_pairs, "demon_kill");
           }
         }
-        this.gs.flags["pirate_captain_defeated"] = true;
+      }
+      // ボス撃破処理
+      if (b.ctx.bossId) {
+        const bossDef = getEnemyDef(b.ctx.bossId);
+        this.gs.flags[`${b.ctx.bossId}_defeated`] = true;
+        if (bossDef.on_defeat?.["stop_island_pirates"]) this.gs.flags["pirates_stopped"] = true;
+        if (bossDef.on_defeat?.["dream_rate_mult"]) this.gs.flags["nightmare_king_defeated"] = true;
+        if (bossDef.victory === "rescue_kidnapped_all") {
+          for (const c of Object.values(this.gs.party)) {
+            if (c.exclusion === "kidnapped") {
+              c.exclusion = "none";
+              c.downed = false;
+              c.hp = Math.max(1, Math.round(c.maxHp * 0.5));
+            }
+          }
+        }
       }
     }
 
-    // 溺水判定: レニィ保持者なら溺死自体が発生しない。供物継続なら水の女神が救済（矛盾#4）
+    // 溺水（第0巻矛盾#4）
     if (result.outcome === "drowned") {
       const rennyHolder = this.gs.holder === "renny";
       const waterOk = this.tribute.remainingDays("water") >= 0;
-      for (const a of this.currentBattle.allies) {
+      for (const a of b.allies) {
         if (a.state.id === "renny") { a.state.downed = false; continue; }
         if (rennyHolder || waterOk) {
           a.state.downed = false;
@@ -293,25 +403,79 @@ export class GameManager {
     return result;
   }
 
+  // ============ ドグ商店（第7巻8-0）============
+  dogAvailable(): boolean {
+    return this.gs.day >= DB.config.kidnap.pirate_active_from_day
+      && this.gs.location === "beach" && !this.gs.flags["dog_closed"];
+  }
+
+  buyPrice(itemId: string): number | null {
+    const sell = DB.items[itemId]?.sell;
+    return sell == null ? null : sell * DB.config.economy.buy_mult;
+  }
+
+  buyItem(itemId: string): boolean {
+    const price = this.buyPrice(itemId);
+    if (price === null || this.gs.silver < price) return false;
+    this.gs.silver -= price;
+    this.gs.inventory[itemId] = (this.gs.inventory[itemId] ?? 0) + 1;
+    return true;
+  }
+
+  sellItem(itemId: string): boolean {
+    const sell = DB.items[itemId]?.sell;
+    if (sell == null || (this.gs.inventory[itemId] ?? 0) < 1) return false;
+    this.gs.inventory[itemId]--;
+    this.gs.silver += sell;
+    return true;
+  }
+
+  // ============ 武器装備 ============
+  equip(charId: string, itemId: string): boolean {
+    const c = this.gs.party[charId];
+    const item = DB.items[itemId];
+    if (!c || !item || item.category !== "weapon") return false;
+    if (item.weapon_type !== DB.characters[charId].weapon_type) return false;
+    if ((this.gs.inventory[itemId] ?? 0) < 1) return false;
+    if (c.equippedWeapon) {
+      this.gs.inventory[c.equippedWeapon] = (this.gs.inventory[c.equippedWeapon] ?? 0) + 1;
+    }
+    this.gs.inventory[itemId]--;
+    c.equippedWeapon = itemId;
+    return true;
+  }
+
+  // ============ ボス出現条件（第8巻11章）============
+  bossUnlocked(bossId: string): boolean {
+    const def = getEnemyDef(bossId);
+    const u = def.unlock ?? {};
+    if (this.gs.flags[`${bossId}_defeated`] && bossId !== "pirate_captain") return false;
+    if (u["day_min"] !== undefined && this.gs.day < (u["day_min"] as number)) return false;
+    if (u["day_fixed"] !== undefined && this.gs.day < (u["day_fixed"] as number)) return false;
+    if (u["tributes_fire_min"] !== undefined && this.gs.tribute.fireCount < (u["tributes_fire_min"] as number)) return false;
+    if (u["shark_kills_min"] !== undefined && this.gs.stats.sharkKills < (u["shark_kills_min"] as number)) return false;
+    if (u["coma_count_min"] !== undefined && this.gs.stats.comaTotal < (u["coma_count_min"] as number)) return false;
+    if (u["tide"] !== undefined && this.gs.tide !== u["tide"]) return false;
+    return true;
+  }
+
   triggerGameOver(reason: GOReason): void {
     this.gs.gameOver = reason;
     this.phase = "gameover";
   }
 
-  // 悪魔取り憑き（戦闘/イベント由来）。保持者なら即GO（掟）
   possess(charId: string): void {
-    if (charId === this.gs.holder) {
-      this.triggerGameOver("holder_possess");
-      return;
-    }
+    if (charId === this.gs.holder) { this.triggerGameOver("holder_possess"); return; }
     this.statusFx.apply(charId, "betrayal", "demon");
   }
 
-  // 隠しキャラ加入（hidden_goddessイベント後に呼ぶ）
   joinGoddess(): void {
     if (this.gs.party["goddess"]) return;
-    this.gs.party["goddess"] = createCharacterState("goddess",
-      Math.max(1, this.party.getHolder().level));
+    const lv = Math.max(DB.characters["goddess"].join_min_lv ?? 40,
+      Math.round(this.party.avgLevel()));
+    this.gs.party["goddess"] = createCharacterState("goddess", lv);
     this.gs.flags["goddess_joined"] = true;
   }
+
+  foodStockList(): FoodStockEntry[] { return this.gs.foodStock; }
 }

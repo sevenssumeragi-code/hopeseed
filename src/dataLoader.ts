@@ -76,27 +76,35 @@ export function validateData(): ValidationResult {
   const errors: string[] = [];
   const charIds = Object.keys(DB.characters);
 
-  // キャラの技IDが skills に存在するか
   for (const [cid, c] of Object.entries(DB.characters)) {
-    for (const sid of c.skills) {
-      if (!DB.skills[sid]) errors.push(`character '${cid}' references missing skill '${sid}'`);
-    }
     if (c.base.hp <= 0) errors.push(`character '${cid}' has non-positive base hp`);
+    // 全キャラに技が存在するか（技はowner参照で紐付け）
+    const skills = Object.values(DB.skills).filter((s) => s.owner === cid);
+    if (skills.length === 0) errors.push(`character '${cid}' has no skills`);
   }
-  // 技の owner が存在するか
   for (const [sid, s] of Object.entries(DB.skills)) {
     if (!charIds.includes(s.owner)) errors.push(`skill '${sid}' owner '${s.owner}' not a character`);
     if (s.learn_lv < 1 || s.learn_lv > DB.config.MAX_LEVEL) {
       errors.push(`skill '${sid}' learn_lv out of range`);
     }
   }
-  // 敵のドロップ品が items に存在するか
+  // 敵のドロップ品・stat_ref参照
   for (const [eid, e] of Object.entries({ ...DB.enemies, ...DB.bosses })) {
-    for (const d of (e as EnemyDef).drops ?? []) {
-      if (!DB.items[d.item]) errors.push(`enemy '${eid}' drops missing item '${d.item}'`);
+    const def = e as EnemyDef;
+    for (const d of def.drops ?? []) {
+      if (d.item !== "herb_random" && !DB.items[d.item]) {
+        errors.push(`enemy '${eid}' drops missing item '${d.item}'`);
+      }
+    }
+    if (def.boss) {
+      if (!def.hp_fixed) errors.push(`boss '${eid}' missing hp_fixed`);
+      if (def.stat_ref && !DB.enemies[def.stat_ref]) {
+        errors.push(`boss '${eid}' stat_ref '${def.stat_ref}' missing`);
+      }
+    } else if (!def.base) {
+      errors.push(`enemy '${eid}' missing base stats`);
     }
   }
-  // マップの接続先が存在するか
   for (const [mid, m] of Object.entries(DB.maps)) {
     for (const conn of m.connections) {
       if (!DB.maps[conn]) errors.push(`map '${mid}' connects to missing map '${conn}'`);
@@ -105,8 +113,10 @@ export function validateData(): ValidationResult {
       if (!DB.enemies[eid]) errors.push(`map '${mid}' spawns missing enemy '${eid}'`);
     }
     if (m.boss && !DB.bosses[m.boss]) errors.push(`map '${mid}' boss '${m.boss}' missing`);
+    for (const g of m.gather) {
+      if (!DB.items[g.item]) errors.push(`map '${mid}' gathers missing item '${g.item}'`);
+    }
   }
-  // レシピ結果が items に存在するか
   for (const [type, list] of Object.entries(DB.recipes)) {
     if (type.startsWith("_")) continue;
     for (const r of list) {

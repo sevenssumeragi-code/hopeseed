@@ -1,22 +1,58 @@
 {
-  "_source": "第7巻9章未受領のため【AI提案・要差替】。type=cook/build/pharmacy。skill_reqは対応するcraft値。",
+  "_source": "第7巻9-1〜9-3(正本)。skill_req=必要適性。品質判定は9-0-1(エンジン実装)。T4はボス素材+聖なる水+適性70。",
 
   "cook": [
-    {"id":"grilled_meat","result":"grilled_meat","inputs":[{"item":"raw_meat","qty":1}],"skill_req":0},
-    {"id":"grilled_fish","result":"grilled_fish","inputs":[{"item":"fish","qty":1}],"skill_req":0},
-    {"id":"herb_soup","result":"herb_soup","inputs":[{"item":"herb_leaf","qty":1},{"item":"raw_meat","qty":1}],"skill_req":30}
+    {"id":"dish_yakiniku","result":"dish_yakiniku","inputs":[{"item":"meat","qty":1}],"skill_req":0},
+    {"id":"dish_shioyaki","result":"dish_shioyaki","inputs":[{"item":"fish","qty":1}],"skill_req":0},
+    {"id":"dish_kayu","result":"dish_kayu","inputs":[{"item":"nuts","qty":2},{"item":"grain","qty":1}],"skill_req":0},
+    {"id":"dish_kinoko","result":"dish_kinoko","inputs":[{"item":"mushroom","qty":2}],"skill_req":0},
+    {"id":"dish_soup","result":"dish_soup","inputs":[{"item":"wild_grass","qty":2},{"item":"seaweed","qty":1}],"skill_req":0},
+    {"id":"dish_hamayaki","result":"dish_hamayaki","inputs":[{"item":"shellfish","qty":3}],"skill_req":0},
+    {"id":"dish_kaninabe","result":"dish_kaninabe","inputs":[{"item":"crab","qty":1},{"item":"seaweed","qty":1},{"item":"wild_grass","qty":1}],"skill_req":0},
+    {"id":"dish_kurage","result":"dish_kurage","inputs":[{"item":"jellyfish_meat","qty":1},{"item":"seaweed","qty":1}],"skill_req":0},
+    {"id":"dish_caviar","result":"dish_caviar","inputs":[{"item":"caviar","qty":1}],"skill_req":0},
+    {"id":"dish_honey","result":"dish_honey","inputs":[{"item":"honey","qty":1},{"item":"nuts","qty":1}],"skill_req":0,"craft_bonus":5},
+    {"id":"dish_ryoshimeshi","result":"dish_ryoshimeshi","inputs":[{"item":"fish","qty":2},{"item":"grain","qty":1}],"skill_req":0},
+    {"id":"dish_kaizoku","result":"dish_kaizoku","inputs":[{"item":"meat","qty":1},{"item":"rum","qty":1}],"skill_req":0}
   ],
+
   "build": [
-    {"id":"iron_sword","result":"iron_sword","inputs":[{"item":"iron_scrap","qty":2}],"skill_req":20},
-    {"id":"iron_dagger","result":"iron_dagger","inputs":[{"item":"iron_scrap","qty":1}],"skill_req":15},
-    {"id":"iron_axe","result":"iron_axe","inputs":[{"item":"iron_scrap","qty":2},{"item":"fire_stone","qty":1}],"skill_req":25},
-    {"id":"iron_spear","result":"iron_spear","inputs":[{"item":"iron_scrap","qty":2}],"skill_req":20}
+    {"id":"torch","result":"torch","inputs":[{"item":"wood","qty":1},{"item":"grass_fiber","qty":1}],"skill_req":10},
+    {"id":"rope","result":"rope","inputs":[{"item":"grass_fiber","qty":3}],"skill_req":15},
+    {"id":"fishing_rod","result":"fishing_rod","inputs":[{"item":"wood","qty":2},{"item":"grass_fiber","qty":2}],"skill_req":20},
+    {"id":"boat_repair_kit","result":"boat_repair_kit","inputs":[{"item":"wood","qty":5},{"item":"sailcloth","qty":1}],"skill_req":40},
+
+    {"id":"renny_t1","result":"renny_t1","for":"renny","inputs":[{"item":"wood","qty":2}],"skill_req":10},
+    {"id":"renny_t2","result":"renny_t2","for":"renny","inputs":[{"item":"beast_bone","qty":2},{"item":"wood","qty":1}],"skill_req":30},
+    {"id":"renny_t3","result":"renny_t3","for":"renny","inputs":[{"item":"volcanic_stone","qty":2},{"item":"iron_ore","qty":1}],"skill_req":50},
+    {"id":"renny_t4","result":"renny_t4","for":"renny","inputs":[{"item":"iron_ore","qty":3},{"item":"holy_water","qty":1},{"item":"nushi_fang","qty":1}],"skill_req":70},
+    {"id":"jinpachi_t1","result":"jinpachi_t1","for":"jinpachi","inputs":[{"item":"wood","qty":2}],"skill_req":10},
+    {"id":"jinpachi_t2","result":"jinpachi_t2","for":"jinpachi","inputs":[{"item":"beast_bone","qty":2},{"item":"wood","qty":1}],"skill_req":30},
+    {"id":"jinpachi_t3","result":"jinpachi_t3","for":"jinpachi","inputs":[{"item":"volcanic_stone","qty":2},{"item":"iron_ore","qty":1}],"skill_req":50},
+    {"id":"jinpachi_t4","result":"jinpachi_t4","for":"jinpachi","inputs":[{"item":"iron_ore","qty":3},{"item":"holy_water","qty":1},{"item":"flame_horn","qty":1}],"skill_req":70},
+    {"id":"hyu_t1","result":"hyu_t1","for":"hyu","inputs":[{"item":"wood","qty":2}],"skill_req":10},
+    {"id":"hyu_t2","result":"hyu_t2","for":"hyu","inputs":[{"item":"beast_bone","qty":2},{"item":"wood","qty":1}],"skill_req":30},
+    {"id":"hyu_t3","result":"hyu_t3","for":"hyu","inputs":[{"item":"volcanic_stone","qty":2},{"item":"iron_ore","qty":1}],"skill_req":50},
+    {"id":"hyu_t4","result":"hyu_t4","for":"hyu","inputs":[{"item":"iron_ore","qty":3},{"item":"holy_water","qty":1},{"item":"captain_sword","qty":1}],"skill_req":70},
+    {"id":"muni_t1","result":"muni_t1","for":"muni","inputs":[{"item":"grass_fiber","qty":2}],"skill_req":10},
+    {"id":"muni_t2","result":"muni_t2","for":"muni","inputs":[{"item":"beast_bone","qty":2},{"item":"wood","qty":1}],"skill_req":30},
+    {"id":"muni_t3","result":"muni_t3","for":"muni","inputs":[{"item":"volcanic_stone","qty":2},{"item":"iron_ore","qty":1}],"skill_req":50},
+    {"id":"muni_t4","result":"muni_t4","for":"muni","inputs":[{"item":"iron_ore","qty":3},{"item":"holy_water","qty":1},{"item":"dream_crystal","qty":1}],"skill_req":70},
+    {"id":"geru_t1","result":"geru_t1","for":"geru","inputs":[{"item":"wood","qty":2}],"skill_req":10},
+    {"id":"geru_t2","result":"geru_t2","for":"geru","inputs":[{"item":"beast_bone","qty":2},{"item":"wood","qty":1}],"skill_req":30},
+    {"id":"geru_t3","result":"geru_t3","for":"geru","inputs":[{"item":"volcanic_stone","qty":2},{"item":"iron_ore","qty":1}],"skill_req":50},
+    {"id":"geru_t4","result":"geru_t4","for":"geru","inputs":[{"item":"iron_ore","qty":3},{"item":"holy_water","qty":1},{"item":"dream_crystal","qty":1}],"skill_req":70},
+    {"id":"neo_t2","result":"neo_t2","for":"neo","inputs":[{"item":"beast_bone","qty":2},{"item":"wood","qty":1},{"item":"ouken","qty":1}],"skill_req":30},
+    {"id":"neo_t3","result":"neo_t3","for":"neo","inputs":[{"item":"volcanic_stone","qty":2},{"item":"iron_ore","qty":1},{"item":"neo_t2","qty":1}],"skill_req":50},
+    {"id":"neo_t4","result":"neo_t4","for":"neo","inputs":[{"item":"iron_ore","qty":3},{"item":"holy_water","qty":1},{"item":"overlord_core","qty":1},{"item":"neo_t3","qty":1}],"skill_req":70}
   ],
+
   "pharmacy": [
-    {"id":"antidote","result":"antidote","inputs":[{"item":"herb_leaf","qty":1}],"skill_req":20},
-    {"id":"styptic","result":"styptic","inputs":[{"item":"herb_leaf","qty":2}],"skill_req":30},
-    {"id":"fever_cure","result":"fever_cure","inputs":[{"item":"herb_leaf","qty":1},{"item":"toxic_pollen","qty":1}],"skill_req":45},
-    {"id":"potion","result":"potion","inputs":[{"item":"herb_leaf","qty":2}],"skill_req":25},
-    {"id":"cure_all","result":"cure_all","inputs":[{"item":"herb_leaf","qty":3},{"item":"toxic_pollen","qty":1}],"skill_req":60}
+    {"id":"antidote","result":"antidote","inputs":[{"item":"herb_green","qty":1},{"item":"herb_red","qty":1}],"skill_req":10},
+    {"id":"burn_salve","result":"burn_salve","inputs":[{"item":"herb_red","qty":2}],"skill_req":10},
+    {"id":"numb_cure","result":"numb_cure","inputs":[{"item":"herb_blue","qty":1},{"item":"herb_yellow","qty":1}],"skill_req":20},
+    {"id":"plague_cure","result":"plague_cure","inputs":[{"item":"herb_green","qty":2},{"item":"herb_blue","qty":1}],"skill_req":35,"catalyst":{"item":"sulfur","bonus":10}},
+    {"id":"obesity_pill","result":"obesity_pill","inputs":[{"item":"herb_yellow","qty":2}],"skill_req":30},
+    {"id":"infection_cure","result":"infection_cure","inputs":[{"item":"herb_red","qty":1},{"item":"herb_blue","qty":1},{"item":"herb_green","qty":1},{"item":"herb_yellow","qty":1}],"skill_req":60,"catalyst":{"item":"holy_water","bonus":15}}
   ]
 }

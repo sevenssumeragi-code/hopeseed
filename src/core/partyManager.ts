@@ -11,14 +11,18 @@ export function createCharacterState(id: string, level = 1): CharacterState {
     hp: maxHp(def, level), sp: maxSp(def, level),
     maxHp: maxHp(def, level), maxSp: maxSp(def, level),
     exclusion: "none", comaDaysLeft: 0, betrayalDaysLeft: 0,
-    status: {}, buffs: {}, equippedWeapon: null, downed: false,
+    status: {}, buffs: {}, buffTurns: {},
+    hitDebuff: 0, hitDebuffTurns: 0,
+    protectRateBuff: 0, protectRateTurns: 0,
+    atkBuffNextBattle: 0,
+    equippedWeapon: def.initial_weapon ?? null,   // ネオは王剣を初期装備（第7巻8-4）
+    downed: false,
   };
 }
 
 export class PartyManager {
   constructor(private gs: GameState) {}
 
-  // 除外(死亡/誘拐/裏切り離脱)・昏睡を除く行動可能メンバー
   getActiveMembers(): CharacterState[] {
     return Object.values(this.gs.party).filter(
       (c) => c.exclusion === "none" && c.comaDaysLeft === 0,
@@ -27,13 +31,18 @@ export class PartyManager {
 
   getHolder(): CharacterState { return this.gs.party[this.gs.holder]; }
 
-  applyExclusion(charId: string, kind: ExclusionKind): void {
-    const c = this.gs.party[charId];
-    if (!c) return;
-    c.exclusion = kind;
+  avgLevel(): number {
+    const active = this.getActiveMembers();
+    if (active.length === 0) return 1;
+    return active.reduce((s, c) => s + c.level, 0) / active.length;
   }
 
-  // 蘇生: 湖の祠。7日に1人（Lv・技・持ち物・信頼度は引き継がれる=CharacterStateを保持したまま復帰）
+  applyExclusion(charId: string, kind: ExclusionKind): void {
+    const c = this.gs.party[charId];
+    if (c) c.exclusion = kind;
+  }
+
+  // 蘇生: 7日に1人。Lv・技・持ち物・信頼度は引き継ぎ（=stateを保持したまま復帰）
   revive(charId: string): boolean {
     const c = this.gs.party[charId];
     if (!c || c.exclusion !== "dead") return false;

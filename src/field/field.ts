@@ -38,11 +38,19 @@ export class FieldState {
   px: number; py: number; // プレイヤー位置（マス座標）
   symbols: FieldSymbol[] = [];
   private rng: RNG;
+  private day: number;
+  private densityMult: number;
+  private piratesStopped: boolean;
 
-  constructor(mapId: string, rng: RNG, slot: TimeSlot, opts?: { bossDefeated?: boolean }) {
+  constructor(mapId: string, rng: RNG, slot: TimeSlot, opts?: {
+    bossDefeated?: boolean; day?: number; densityMult?: number; piratesStopped?: boolean;
+  }) {
     this.mapId = mapId;
     this.map = DB.maps[mapId];
     this.rng = rng;
+    this.day = opts?.day ?? 1;
+    this.densityMult = opts?.densityMult ?? 1.0;
+    this.piratesStopped = opts?.piratesStopped ?? false;
     this.px = this.map.size[0] / 2;
     this.py = this.map.size[1] - 2;
     this.populate(slot, opts?.bossDefeated ?? false);
@@ -58,17 +66,35 @@ export class FieldState {
       const [x, y] = positions[i % positions.length];
       this.symbols.push({ kind: "exit", x, y, exitTo: to, dx: 0, dy: 0 });
     });
-    // 敵シンボル: 出現率×エリア面積で数を決定。夜は悪魔追加（第0巻0-3-3）
-    let pool = [...this.map.enemies];
-    if (slot === "night" && this.map.night_enemies) pool = pool.concat(this.map.night_enemies);
+    // 敵シンボル: 密度は第14巻18-2（昼/夜）。夜は悪魔等が追加、海賊は昼のみ・40日目以降。
+    const isNight = slot === "night";
+    let pool = this.map.enemies.filter((id) => {
+      const def = DB.enemies[id];
+      const sp = def.spawn ?? { areas: [] };
+      if (sp.from_day && this.day < sp.from_day) return false;
+      if (def.family === "pirate" && (this.piratesStopped || (isNight && this.map.night_no_pirates))) return false;
+      if (sp.time === "night" && !isNight) return false;
+      if (sp.time === "day" && isNight && def.family !== "pirate") return false;
+      return true;
+    });
+    if (isNight && this.map.night_enemies) {
+      pool = pool.concat(this.map.night_enemies.filter((id) => {
+        const sp = DB.enemies[id].spawn;
+        return !(sp?.from_day && this.day < sp.from_day);
+      }));
+    }
     if (pool.length > 0) {
-      const count = Math.max(1, Math.round(this.map.encounter_rate * 20));
+      let count = isNight ? this.map.density_night : this.map.density_day;
+      count = Math.max(1, Math.round(count * this.densityMult));
       for (let i = 0; i < count; i++) {
+        const enemyId = this.rng.pick(pool);
+        const stationary = DB.enemies[enemyId].spawn?.stationary ?? false;
         this.symbols.push({
           kind: "enemy",
           x: this.rng.range(2, w - 2), y: this.rng.range(2, h * 0.75),
-          enemyId: this.rng.pick(pool),
-          dx: this.rng.range(-0.03, 0.03), dy: this.rng.range(-0.03, 0.03),
+          enemyId,
+          dx: stationary ? 0 : this.rng.range(-0.03, 0.03),
+          dy: stationary ? 0 : this.rng.range(-0.03, 0.03),
         });
       }
     }
@@ -208,8 +234,12 @@ export class FieldState {
           : fam === "nightmare" ? "👻" : "🐗";
       }
       if (s.kind === "gather" && s.gatherItem) {
-        icon = s.gatherItem === "fish" ? "🐟" : s.gatherItem === "fire_stone" ? "🪨"
-          : s.gatherItem === "iron_scrap" ? "⚙️" : s.gatherItem === "caviar" ? "🫧" : "🌿";
+        const gi = s.gatherItem;
+        icon = gi === "fish" ? "🐟" : gi === "volcanic_stone" || gi === "iron_ore" || gi === "iron_sand" ? "🪨"
+          : gi === "wood" || gi === "driftwood" ? "🪵" : gi === "caviar" || gi === "pearl" ? "🫧"
+          : gi === "shellfish" || gi === "crab" ? "🦀" : gi === "honey" ? "🍯"
+          : gi === "holy_water" ? "💧" : gi.startsWith("herb") ? "🌿"
+          : gi === "nuts" || gi === "mushroom" ? "🍄" : "🌿";
       }
       ctx.fillText(icon, sx, sy);
       if (s.kind === "exit") {

@@ -32,8 +32,8 @@ export class TributeManager {
       return { ok: false, line: lines.offer_none };
     }
     this.gs.inventory[itemId]--;
-    if (goddess === "fire") this.gs.tribute.fireLastDay = this.gs.day;
-    else this.gs.tribute.waterLastDay = this.gs.day;
+    if (goddess === "fire") { this.gs.tribute.fireLastDay = this.gs.day; this.gs.tribute.fireCount++; }
+    else { this.gs.tribute.waterLastDay = this.gs.day; this.gs.tribute.waterCount++; }
     return { ok: true, line: lines.offer_ok };
   }
 

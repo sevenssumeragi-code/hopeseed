@@ -1,6 +1,171 @@
 {
-  "_source": "shark=GDD第16巻20-3-3(正本). 他は第8巻10章未受領のため【AI提案・要差替】。familyは第10章の8系統に対応。",
+  "_source": "第8巻10-1〜10-8(正本・Lv1基礎値)。スケーリング=10-0-1: HP×(1+0.10(Lv-1))/他×(1+0.08(Lv-1))/EXP=基礎×Lv×0.5。ドロップ率=第14巻18-3で最終確定(第8巻値をそのまま採用)。",
 
+  "fireball": {
+    "name": "火の玉", "family": "fire_monster",
+    "base": {"hp":25,"atk":9,"def":5,"spd":12,"skl":6,"eva":10},
+    "ai": "aggressive", "exp_base": 8,
+    "skills": [
+      {"name":"火の粉","accuracy":100,"power":0.8,"effects":[{"type":"burn","chance":0.10}]},
+      {"name":"燃え移り","accuracy":90,"power":1.2,"effects":[{"type":"burn","chance":0.30}]}
+    ],
+    "drops": [{"item":"torch","rate":0.10}],
+    "spawn": {"areas":["volcano"],"time":"any"}
+  },
+  "lava_worm": {
+    "name": "溶岩虫", "family": "fire_monster",
+    "base": {"hp":40,"atk":8,"def":14,"spd":4,"skl":5,"eva":3},
+    "ai": "swarm", "exp_base": 10,
+    "skills": [
+      {"name":"噛みつき","accuracy":95,"power":1.0,"effects":[]},
+      {"name":"溶岩飛沫","accuracy":85,"power":1.5,"effects":[{"type":"burn","chance":0.20}]}
+    ],
+    "drops": [{"item":"torch","rate":0.05},{"item":"volcanic_stone","rate":0.20}],
+    "spawn": {"areas":["volcano"],"time":"any"}
+  },
+  "flame_beast": {
+    "name": "火炎獣", "family": "fire_monster",
+    "base": {"hp":70,"atk":14,"def":10,"spd":9,"skl":8,"eva":6},
+    "ai": "tactical", "exp_base": 16,
+    "skills": [
+      {"name":"火炎の爪","accuracy":90,"power":1.5,"effects":[{"type":"burn","chance":0.20}]},
+      {"name":"火炎放射","accuracy":80,"power":2.0,"effects":[{"type":"burn","chance":0.40}]}
+    ],
+    "drops": [{"item":"torch","rate":0.15}],
+    "spawn": {"areas":["volcano"],"time":"any"}
+  },
+
+  "wolf": {
+    "name": "オオカミ", "family": "beast",
+    "base": {"hp":35,"atk":11,"def":6,"spd":13,"skl":7,"eva":10},
+    "ai": "aggressive", "exp_base": 9,
+    "skills": [
+      {"name":"牙","accuracy":95,"power":1.0,"effects":[]},
+      {"name":"引き裂き","accuracy":85,"power":1.5,"effects":[{"type":"bleed","chance":0.20}]}
+    ],
+    "drops": [{"item":"meat","rate":0.10},{"item":"beast_bone","rate":0.10}],
+    "spawn": {"areas":["wasteland","forest_lake","grassland"],"time":"any"}
+  },
+  "boar": {
+    "name": "イノシシ", "family": "beast",
+    "base": {"hp":45,"atk":12,"def":8,"spd":10,"skl":5,"eva":6},
+    "ai": "aggressive", "exp_base": 10,
+    "skills": [
+      {"name":"突進","accuracy":90,"power":1.3,"effects":[]},
+      {"name":"猪突猛進","accuracy":75,"power":2.0,"effects":[]}
+    ],
+    "drops": [{"item":"meat","rate":0.15},{"item":"beast_bone","rate":0.10}],
+    "spawn": {"areas":["forest_lake","grassland"],"time":"any"}
+  },
+  "bull": {
+    "name": "猛牛", "family": "beast",
+    "base": {"hp":60,"atk":15,"def":10,"spd":8,"skl":6,"eva":4},
+    "ai": "aggressive", "exp_base": 14,
+    "skills": [
+      {"name":"角突き","accuracy":90,"power":1.4,"effects":[]},
+      {"name":"暴走","accuracy":70,"power":2.2,"effects":[{"type":"bleed","chance":0.10}]}
+    ],
+    "drops": [{"item":"meat","rate":0.20},{"item":"beast_bone","rate":0.10}],
+    "spawn": {"areas":["wasteland","grassland"],"time":"any"}
+  },
+  "tiger": {
+    "name": "虎", "family": "beast",
+    "base": {"hp":55,"atk":17,"def":8,"spd":15,"skl":9,"eva":11},
+    "ai": "tactical", "exp_base": 18,
+    "skills": [
+      {"name":"爪","accuracy":90,"power":1.5,"effects":[{"type":"bleed","chance":0.25}]},
+      {"name":"喉狙い","accuracy":70,"power":2.0,"effects":[{"type":"crit_bonus","amount":5}]}
+    ],
+    "drops": [{"item":"meat","rate":0.20},{"item":"beast_bone","rate":0.10}],
+    "spawn": {"areas":["grassland"],"time":"night"}
+  },
+  "bear": {
+    "name": "熊", "family": "beast",
+    "base": {"hp":90,"atk":18,"def":12,"spd":6,"skl":7,"eva":4},
+    "ai": "tactical", "exp_base": 22,
+    "skills": [
+      {"name":"薙ぎ払い","accuracy":85,"power":1.6,"effects":[]},
+      {"name":"熊の一撃","accuracy":70,"power":2.5,"effects":[{"type":"bleed","chance":0.30}]}
+    ],
+    "drops": [{"item":"meat","rate":0.25},{"item":"beast_bone","rate":0.10}],
+    "spawn": {"areas":["forest_lake"],"time":"any"}
+  },
+
+  "flytrap": {
+    "name": "巨大ハエトリグサ", "family": "man_eating_plant",
+    "base": {"hp":40,"atk":9,"def":10,"spd":3,"skl":6,"eva":2},
+    "ai": "ambush", "exp_base": 9,
+    "skills": [{"name":"噛みつき","accuracy":90,"power":1.2,"effects":[{"type":"poison","chance":0.20}]}],
+    "drops": [{"item":"herb_random","rate":0.15}],
+    "spawn": {"areas":["forest_lake","grassland"],"time":"day","stationary":true}
+  },
+  "pitcher_plant": {
+    "name": "巨大ウツボカズラ", "family": "man_eating_plant",
+    "base": {"hp":50,"atk":8,"def":12,"spd":2,"skl":7,"eva":2},
+    "ai": "ambush", "exp_base": 11,
+    "skills": [{"name":"消化液","accuracy":85,"power":1.3,"effects":[{"type":"poison","chance":0.40}]}],
+    "drops": [{"item":"herb_random","rate":0.20}],
+    "spawn": {"areas":["forest_lake","grassland"],"time":"day","stationary":true}
+  },
+  "rafflesia": {
+    "name": "巨大ラフレシア", "family": "man_eating_plant",
+    "base": {"hp":65,"atk":10,"def":14,"spd":2,"skl":8,"eva":1},
+    "ai": "ambush", "exp_base": 14,
+    "skills": [
+      {"name":"毒の花粉","accuracy":100,"power":0.8,"target":"all","effects":[{"type":"poison","chance":0.50}]},
+      {"name":"締め付け","accuracy":85,"power":1.5,"effects":[]}
+    ],
+    "drops": [{"item":"herb_random","rate":0.25}],
+    "spawn": {"areas":["forest_lake","grassland"],"time":"day","stationary":true}
+  },
+
+  "scorpion": {
+    "name": "サソリ", "family": "insect",
+    "base": {"hp":30,"atk":10,"def":16,"spd":9,"skl":7,"eva":8},
+    "ai": "ambush", "exp_base": 10,
+    "skills": [{"name":"毒針","accuracy":90,"power":1.2,"effects":[{"type":"poison","chance":0.35}]}],
+    "drops": [{"item":"herb_yellow","rate":0.10}],
+    "spawn": {"areas":["wasteland"],"time":"any"}
+  },
+  "centipede": {
+    "name": "ムカデ", "family": "insect",
+    "base": {"hp":38,"atk":11,"def":15,"spd":11,"skl":6,"eva":7},
+    "ai": "swarm", "exp_base": 11,
+    "skills": [
+      {"name":"毒牙","accuracy":90,"power":1.1,"effects":[{"type":"poison","chance":0.30}]},
+      {"name":"巻き付き","accuracy":85,"power":1.4,"effects":[]}
+    ],
+    "drops": [{"item":"herb_green","rate":0.10}],
+    "spawn": {"areas":["wasteland","forest_lake"],"time":"any"}
+  },
+  "giant_mosquito": {
+    "name": "蚊", "family": "insect",
+    "base": {"hp":18,"atk":7,"def":6,"spd":16,"skl":5,"eva":18},
+    "ai": "ambush", "exp_base": 7,
+    "skills": [{"name":"吸血","accuracy":85,"power":0.8,"effects":[{"type":"lifesteal","ratio":0.20},{"type":"plague","chance":0.20}]}],
+    "drops": [],
+    "spawn": {"areas":["forest_lake"],"time":"any"}
+  },
+
+  "jellyfish": {
+    "name": "クラゲ", "family": "giant_fish",
+    "base": {"hp":28,"atk":8,"def":8,"spd":6,"skl":6,"eva":9},
+    "ai": "ambush", "exp_base": 9,
+    "skills": [{"name":"触手","accuracy":90,"power":1.0,"effects":[{"type":"poison","chance":0.15},{"type":"paralysis","chance":0.15}]}],
+    "drops": [{"item":"jellyfish_meat","rate":0.40}],
+    "spawn": {"areas":["shallows"],"time":"any","tide_multiplier":2.0}
+  },
+  "big_fish": {
+    "name": "巨大魚", "family": "giant_fish",
+    "base": {"hp":70,"atk":14,"def":10,"spd":12,"skl":8,"eva":8},
+    "ai": "predator", "exp_base": 16,
+    "skills": [
+      {"name":"体当たり","accuracy":90,"power":1.4,"effects":[]},
+      {"name":"引き込み","accuracy":60,"power":null,"condition":"high_tide","effects":[{"type":"instant_death"}]}
+    ],
+    "drops": [{"item":"fish","rate":0.30}],
+    "spawn": {"areas":["shallows"],"time":"any","tide_multiplier":2.0}
+  },
   "shark": {
     "name": "サメ", "family": "giant_fish",
     "base": {"hp":85,"atk":18,"def":9,"spd":14,"skl":9,"eva":9},
@@ -13,72 +178,56 @@
     "spawn": {"areas":["shallows"],"time":"any","tide_multiplier":2.0}
   },
 
-  "lava_slime": {
-    "name": "溶岩スライム", "family": "fire_monster",
-    "base": {"hp":40,"atk":12,"def":6,"spd":7,"skl":6,"eva":4},
-    "ai": "aggressive", "exp_base": 10,
-    "skills": [{"name":"火の玉","accuracy":85,"power":1.4,"effects":[{"type":"burn","chance":0.25}]}],
-    "drops": [{"item":"fire_stone","rate":0.20}],
-    "spawn": {"areas":["volcano","wasteland"],"time":"any"}
-  },
-
-  "wild_boar": {
-    "name": "野生のイノシシ", "family": "beast",
-    "base": {"hp":55,"atk":14,"def":8,"spd":10,"skl":7,"eva":6},
-    "ai": "aggressive", "exp_base": 12,
-    "skills": [{"name":"突進","accuracy":80,"power":1.6,"effects":[]}],
-    "drops": [{"item":"raw_meat","rate":0.40}],
-    "spawn": {"areas":["wasteland","forest_lake","grassland"],"time":"any"}
-  },
-
-  "man_eater_flower": {
-    "name": "人食い花", "family": "man_eating_plant",
-    "base": {"hp":48,"atk":11,"def":10,"spd":4,"skl":8,"eva":3},
-    "ai": "defensive", "exp_base": 11,
-    "skills": [{"name":"毒の花粉","accuracy":80,"power":0.8,"effects":[{"type":"poison","chance":0.35}]}],
-    "drops": [{"item":"toxic_pollen","rate":0.25}],
-    "spawn": {"areas":["forest_lake"],"time":"any"}
-  },
-
-  "swarm_mosquito": {
-    "name": "群れ蚊", "family": "insect",
-    "base": {"hp":18,"atk":8,"def":3,"spd":16,"skl":10,"eva":12},
-    "ai": "aggressive", "exp_base": 6,
-    "skills": [{"name":"吸血","accuracy":90,"power":0.7,"effects":[{"type":"plague","chance":0.15}]}],
-    "drops": [],
-    "spawn": {"areas":["forest_lake","grassland","beach"],"time":"any"}
-  },
-
-  "pirate_thug": {
-    "name": "海賊の下っ端", "family": "pirate",
-    "base": {"hp":60,"atk":15,"def":9,"spd":9,"skl":8,"eva":6},
-    "ai": "aggressive", "exp_base": 16,
-    "skills": [{"name":"サーベル斬り","accuracy":85,"power":1.5,"effects":[]}],
-    "drops": [{"item":"iron_scrap","rate":0.30}],
-    "spawn": {"areas":["pirate_ship","beach"],"time":"any"}
-  },
-
-  "lesser_demon": {
-    "name": "小悪魔", "family": "demon",
-    "base": {"hp":50,"atk":16,"def":8,"spd":12,"skl":10,"eva":9},
-    "ai": "caster", "exp_base": 18,
-    "weakness": "anti_demon",
+  "pirate_island": {
+    "name": "海賊", "family": "pirate",
+    "base": {"hp":60,"atk":13,"def":10,"spd":9,"skl":9,"eva":8},
+    "ai": "kidnapper", "exp_base": 15,
     "skills": [
-      {"name":"闇の爪","accuracy":85,"power":1.6,"effects":[]},
-      {"name":"惑わし","accuracy":60,"power":null,"effects":[{"type":"paralysis","chance":0.30}]}
+      {"name":"カットラス","accuracy":90,"power":1.3,"effects":[]},
+      {"name":"二丁撃ち","accuracy":80,"power":0.8,"hits":2,"effects":[]},
+      {"name":"誘拐","accuracy":100,"power":null,"condition":"ally_downed","effects":[{"type":"kidnap","chance":0.10}]}
     ],
-    "drops": [{"item":"dark_shard","rate":0.20}],
+    "drops": [{"item":"treasure","rate":0.10}],
+    "silver": [5, 15],
+    "spawn": {"areas":["beach"],"time":"day","from_day":40}
+  },
+  "pirate_ship_crew": {
+    "name": "海賊(船内)", "family": "pirate",
+    "base": {"hp":66,"atk":14,"def":11,"spd":10,"skl":10,"eva":8},
+    "ai": "tactical", "exp_base": 16,
+    "skills": [
+      {"name":"カットラス","accuracy":90,"power":1.3,"effects":[]},
+      {"name":"二丁撃ち","accuracy":80,"power":0.8,"hits":2,"effects":[]}
+    ],
+    "drops": [{"item":"treasure","rate":0.15},{"item":"sailcloth","rate":0.10}],
+    "silver": [5, 15],
+    "spawn": {"areas":["pirate_ship"],"time":"any"}
+  },
+
+  "demon": {
+    "name": "悪魔", "family": "demon",
+    "base": {"hp":75,"atk":14,"def":11,"spd":11,"skl":9,"eva":9},
+    "ai": "possessor", "exp_base": 20,
+    "skills": [
+      {"name":"闇の爪","accuracy":90,"power":1.4,"effects":[]},
+      {"name":"闇の波動","accuracy":80,"power":1.8,"effects":[]},
+      {"name":"取り憑き","accuracy":100,"power":null,"cooldown":3,"effects":[{"type":"possess","chance":0.25}]}
+    ],
+    "drops": [{"item":"demon_shard","rate":0.20}],
+    "silver": [1, 5],
     "spawn": {"areas":["wasteland","grassland","beach"],"time":"night"}
   },
 
-  "nightmare_wisp": {
-    "name": "夢魔の霊", "family": "nightmare",
-    "base": {"hp":45,"atk":14,"def":7,"spd":13,"skl":11,"eva":10},
-    "ai": "caster", "exp_base": 15,
+  "nightmare": {
+    "name": "夢魔", "family": "nightmare",
+    "base": {"hp":65,"atk":13,"def":9,"spd":12,"skl":10,"eva":10},
+    "ai": "duelist", "exp_base": 18,
     "skills": [
-      {"name":"悪夢の囁き","accuracy":70,"power":1.2,"effects":[{"type":"paralysis","chance":0.20}]}
+      {"name":"悪夢","accuracy":90,"power":1.3,"effects":[]},
+      {"name":"誘眠","accuracy":100,"power":null,"effects":[{"type":"sleep_skip","chance":0.30}]},
+      {"name":"夢喰らい","accuracy":75,"power":2.0,"effects":[]}
     ],
-    "drops": [{"item":"dream_dust","rate":0.25}],
+    "drops": [{"item":"dream_fragment","rate":0.30}],
     "spawn": {"areas":["dream"],"time":"night"}
   }
 }
