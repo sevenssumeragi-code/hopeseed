@@ -1,0 +1,156 @@
+/* ホープシード UI（第13巻ワイヤーフレーム未受領のため【AI提案】。1920×1080基準・可変） */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #101418;
+  --panel: #1c2530;
+  --panel-light: #2a3644;
+  --border: #4a5a6a;
+  --text: #e8e4d8;
+  --accent: #e8b84a;
+  --hp: #4ac86a;
+  --sp: #4a9ae8;
+  --danger: #e85a4a;
+  --night: #2a2a4a;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+#app {
+  display: grid;
+  grid-template-rows: 56px 1fr 160px;
+  height: 100vh;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* --- HUD --- */
+#hud {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 2px solid var(--border);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+#hud .hud-item { display: flex; align-items: center; gap: 6px; }
+#hud .hud-label { color: #9ab; font-size: 11px; }
+#hud .hud-value { font-weight: bold; }
+#hud .warn { color: var(--danger); animation: blink 1s infinite; }
+@keyframes blink { 50% { opacity: 0.4; } }
+
+/* --- Screen --- */
+#screen { position: relative; overflow: hidden; background: #0a0e12; }
+.screen-inner { padding: 24px; height: 100%; overflow-y: auto; }
+
+h1.title-logo {
+  font-size: 52px; text-align: center; margin: 80px 0 8px;
+  color: var(--accent); letter-spacing: 8px;
+  text-shadow: 0 0 24px rgba(232,184,74,0.4);
+}
+.subtitle { text-align: center; color: #9ab; margin-bottom: 48px; }
+
+.menu-list { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+button {
+  background: var(--panel);
+  color: var(--text);
+  border: 2px solid var(--border);
+  padding: 10px 28px;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: inherit;
+  transition: all .12s;
+  min-width: 200px;
+}
+button:hover:not(:disabled) { border-color: var(--accent); background: var(--panel-light); }
+button:disabled { opacity: 0.35; cursor: default; }
+button.small { min-width: 0; padding: 6px 14px; font-size: 13px; }
+button.selected { border-color: var(--accent); background: #3a3020; }
+
+.char-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 900px; margin: 0 auto; }
+.char-card {
+  background: var(--panel); border: 2px solid var(--border);
+  border-radius: 6px; padding: 14px; cursor: pointer; transition: all .12s;
+}
+.char-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.char-card h3 { color: var(--accent); margin-bottom: 6px; }
+.char-card p { font-size: 12px; color: #bcd; line-height: 1.6; }
+
+/* --- Field --- */
+#field-canvas { display: block; width: 100%; height: 100%; }
+.field-overlay {
+  position: absolute; top: 12px; left: 12px;
+  background: rgba(16,20,24,0.85); border: 1px solid var(--border);
+  padding: 8px 14px; border-radius: 4px; font-size: 13px;
+}
+.field-actions {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+}
+
+/* --- Battle --- */
+.battle-wrap { display: grid; grid-template-rows: 1fr auto; height: 100%; }
+.battle-field {
+  display: flex; justify-content: space-around; align-items: center;
+  padding: 24px; background: linear-gradient(180deg, #16202c 0%, #0e141c 100%);
+}
+.battle-side { display: flex; flex-direction: column; gap: 10px; }
+.unit-card {
+  background: var(--panel); border: 2px solid var(--border);
+  border-radius: 6px; padding: 10px 16px; min-width: 220px; font-size: 13px;
+}
+.unit-card.enemy { border-color: #7a4a4a; }
+.unit-card.downed { opacity: 0.4; filter: grayscale(1); }
+.unit-card.holder::before { content: "🌱 "; }
+.unit-card .name { font-weight: bold; margin-bottom: 4px; }
+.bar { height: 8px; background: #222; border-radius: 3px; overflow: hidden; margin: 3px 0; }
+.bar-fill { height: 100%; transition: width .3s; }
+.bar-fill.hp { background: var(--hp); }
+.bar-fill.hp.low { background: var(--danger); }
+.bar-fill.sp { background: var(--sp); }
+.battle-commands {
+  display: flex; gap: 8px; padding: 12px 16px; background: var(--panel);
+  border-top: 2px solid var(--border); flex-wrap: wrap; align-items: center;
+}
+
+/* --- Log --- */
+#log-panel {
+  background: var(--panel);
+  border-top: 2px solid var(--border);
+  padding: 10px 16px;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.7;
+}
+#log-panel .log-line { color: #cdc; }
+#log-panel .log-line.important { color: var(--accent); font-weight: bold; }
+
+/* --- Modal (rulebook / events) --- */
+.modal-back {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.modal {
+  background: var(--panel); border: 2px solid var(--accent);
+  border-radius: 8px; padding: 24px; max-width: 720px; max-height: 80vh;
+  overflow-y: auto; white-space: pre-wrap; line-height: 1.9; font-size: 14px;
+}
+.modal h2 { color: var(--accent); margin-bottom: 12px; }
+.modal .modal-actions { margin-top: 16px; text-align: center; }
+
+.section-title { color: var(--accent); font-size: 18px; margin: 18px 0 10px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+table.data { border-collapse: collapse; font-size: 13px; width: 100%; }
+table.data th, table.data td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+table.data th { background: var(--panel-light); }
