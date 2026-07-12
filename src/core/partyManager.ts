@@ -14,6 +14,7 @@ export function createCharacterState(id: string, level = 1): CharacterState {
     status: {}, buffs: {}, buffTurns: {},
     hitDebuff: 0, hitDebuffTurns: 0,
     protectRateBuff: 0, protectRateTurns: 0,
+    satiety: DB.config.hunger.max_gauge, starveDays: 0,
     atkBuffNextBattle: 0,
     equippedWeapon: def.initial_weapon ?? null,   // ネオは王剣を初期装備（第7巻8-4）
     downed: false,

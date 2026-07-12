@@ -38,12 +38,18 @@ function assertClose(actual: number, expected: number, tol: number, msg: string)
 function passDay(gm: GameManager, cureAll = false): void {
   gm.gs.tribute.fireLastDay = gm.gs.day;
   gm.gs.tribute.waterLastDay = gm.gs.day;
-  gm.gs.hunger = 100;
-  gm.gs.starvingDays = 0;
-  if (cureAll) {
-    for (const c of Object.values(gm.gs.party)) c.status = {};
+  for (const c of Object.values(gm.gs.party)) {
+    c.satiety = 100;
+    c.starveDays = 0;
+    if (cureAll) c.status = {};
   }
   gm.endDay();
+}
+function feedAll(gm: GameManager): void {
+  for (const c of Object.values(gm.gs.party)) {
+    c.satiety = 100;
+    c.starveDays = 0;
+  }
 }
 
 console.log("[M1] データ基盤・第5巻成長表一致");
@@ -201,11 +207,12 @@ test("[供物] 14日超過でGO・加護で28日", () => {
   const gm = new GameManager();
   gm.newGame("neo", 42);
   for (let i = 0; i < 20 && gm.phase !== "gameover"; i++) {
-    gm.gs.hunger = 100; gm.gs.starvingDays = 0;
+    feedAll(gm);
     gm.endDay();
   }
   assertEq(gm.phase, "gameover", "GO発生");
   assert(gm.gs.gameOver === "tribute_fire_expired" || gm.gs.gameOver === "tribute_water_expired", "供物GO");
+  assertEq(gm.gs.day, 15, "M2-T1: 供物ゼロ→Day15の朝にGO（期限=Day14）");
 
   const gm2 = new GameManager();
   gm2.newGame("jinpachi", 42);
@@ -223,30 +230,30 @@ test("[供物] 品目検査と供物カウント", () => {
   assert(!gm.tribute.offer("fire", "fish").ok, "魚→炎NG");
 });
 
-test("[空腹] 減衰15/日(探索20)・絶食7日でGO", () => {
+test("[空腹] キャラ個別減衰15/日(探索20)・絶食で餓死→保持者GO1(M2-T6)", () => {
   const gm = new GameManager();
   gm.newGame("neo", 42);
-  const h0 = gm.gs.hunger;
+  const h0 = gm.gs.party["neo"].satiety;
   gm.gs.tribute.fireLastDay = gm.gs.day;
   gm.gs.tribute.waterLastDay = gm.gs.day;
   gm.endDay();
-  assertEq(gm.gs.hunger, h0 - 15, "拠点日−15");
-  for (let i = 0; i < 15 && gm.phase !== "gameover"; i++) {
+  assertEq(gm.gs.party["neo"].satiety, h0 - 15, "拠点日−15(個別)");
+  // 誰も食べない → 全員が個別に餓死し、保持者死亡でGO1
+  for (let i = 0; i < 30 && gm.phase !== "gameover"; i++) {
     gm.gs.tribute.fireLastDay = gm.gs.day;
     gm.gs.tribute.waterLastDay = gm.gs.day;
     gm.endDay();
   }
   assertEq(gm.phase, "gameover", "飢餓GO");
+  assertEq(gm.gs.gameOver, "holder_death", "GO1");
+  assert(gm.gs.day >= 13 && gm.gs.day <= 16, `M2-T6b: 餓死時期はDay13〜16 (day=${gm.gs.day})`);
 });
 
 test("[天候] 嵐の翌日は必ず晴れ（第14巻18-9）", () => {
   const gm = new GameManager();
   gm.newGame("neo", 7);
   gm.gs.weather = "storm";
-  gm.gs.tribute.fireLastDay = gm.gs.day;
-  gm.gs.tribute.waterLastDay = gm.gs.day;
-  gm.gs.hunger = 100;
-  gm.endDay();
+  passDay(gm);
   assertEq(gm.gs.weather, "clear", "翌日晴れ");
 });
 
@@ -582,11 +589,11 @@ test("[食事] 品質でHP回復量が変わる・満腹+40", () => {
   gm.newGame("renny", 42);
   const holder = gm.gs.party["renny"];
   holder.hp = 1;
-  gm.gs.hunger = 40;
+  holder.satiety = 40;
   gm.gs.foodStock.push({ dishId: "dish_yakiniku", quality: "great", madeDay: gm.gs.day });
   gm.eatDish(0, "renny");
   assertEq(holder.hp, holder.maxHp, "おいしい=全回復");
-  assertEq(gm.gs.hunger, 80, "+40");
+  assertEq(holder.satiety, 80, "+40(個別)");
 });
 
 test("[食事] 生食: 木の実OK・キノコは10%毒（8-1）", () => {
@@ -687,6 +694,193 @@ test("ボス解禁条件が正しく判定される", () => {
   assert(gm.bossUnlocked("deep_sea_nushi"), "ヌシ解禁");
   gm.gs.tide = "low";
   assert(!gm.bossUnlocked("deep_sea_nushi"), "干潮では不可");
+});
+
+console.log("[M2移植] 通常Chat版M2成果物の受け入れテスト（reference/m2_godot）");
+
+test("M2-T2: ジンパチ保持者=炎の猶予28日→水だけ供えるとDay29にGO4", () => {
+  const gm = new GameManager();
+  gm.newGame("jinpachi", 2);
+  let guard = 0;
+  while (gm.phase !== "gameover" && guard++ < 60) {
+    gm.tribute.offer("water", "fish");
+    gm.gs.inventory["fish"] = 5; // 供物用の魚を補充
+    feedAll(gm);
+    gm.endDay();
+  }
+  assertEq(gm.gs.gameOver, "tribute_fire_expired", "GO4");
+  assertEq(gm.gs.day, 29, "Day29");
+});
+
+test("M2-T4/T5: 毒はDay10付与→Day17死亡・大出血はDay13死亡", () => {
+  const gm = new GameManager();
+  gm.newGame("hyu", 4);
+  let poisonDeath: number | null = null;
+  let bleedDeath: number | null = null;
+  let guard = 0;
+  while (gm.phase !== "gameover" && gm.gs.day < 30 && guard++ < 40) {
+    if (gm.gs.day === 10) {
+      gm.statusFx.apply("muni", "poison", "t");
+      gm.statusFx.apply("neo", "bleed", "t");
+    }
+    passDay(gm);
+    if (gm.gs.party["muni"].exclusion === "dead" && poisonDeath === null) poisonDeath = gm.gs.day;
+    if (gm.gs.party["neo"].exclusion === "dead" && bleedDeath === null) bleedDeath = gm.gs.day;
+  }
+  assertEq(poisonDeath, 17, "毒: 7日後に死亡");
+  assertEq(bleedDeath, 13, "大出血: 3日後に死亡");
+});
+
+test("M2-T7: 昏睡は死なずに3〜5日で自然回復", () => {
+  const gm = new GameManager();
+  gm.newGame("hyu", 7);
+  gm.statusFx.apply("renny", "coma", "t");
+  let recoverDay: number | null = null;
+  let guard = 0;
+  while (recoverDay === null && guard++ < 15) {
+    passDay(gm);
+    if (gm.gs.party["renny"].exclusion === "none") recoverDay = gm.gs.day;
+  }
+  assert(recoverDay !== null && recoverDay >= 4 && recoverDay <= 6, `回復日=${recoverDay}`);
+  assert(gm.gs.party["renny"].exclusion === "none", "生存");
+});
+
+test("M2-T9: 365日間、嵐翌日晴れ違反ゼロ・期限直前(残2日)の嵐ゼロ", () => {
+  const gm = new GameManager();
+  gm.newGame("hyu", 9);
+  let afterStormViolations = 0;
+  let stormNearDeadline = 0;
+  let guard = 0;
+  while (gm.phase !== "ending" && gm.phase !== "gameover" && guard++ < 400) {
+    if (gm.gs.prevWeather === "storm" && gm.gs.weather !== "clear") afterStormViolations++;
+    const minLeft = Math.min(gm.tribute.remainingDays("fire"), gm.tribute.remainingDays("water"));
+    if (gm.gs.weather === "storm" && minLeft <= 2) stormNearDeadline++;
+    passDay(gm, true);
+  }
+  assertEq(afterStormViolations, 0, "嵐翌日晴れ違反");
+  assertEq(stormNearDeadline, 0, "期限直前の嵐");
+});
+
+test("M2-T10: オートセーブ3世代ローテーション", () => {
+  const gm = new GameManager();
+  gm.newGame("hyu", 10);
+  for (let i = 0; i < 5; i++) passDay(gm); // 5回就寝→autosave×5
+  const slots = gm.save.listSlots().filter((s) => s.startsWith("auto"));
+  assertEq(slots.length, 3, "3世代");
+  const loaded = gm.save.loadSlot("auto_0");
+  assert(loaded !== null, "ロード可");
+});
+
+test("M2-T11: 疫病の重症化率（3日目≈20%・統計検証）", () => {
+  let severeAt3 = 0;
+  const TRIALS = 3000;
+  for (let i = 0; i < TRIALS; i++) {
+    const gm = new GameManager();
+    gm.newGame("hyu", 10000 + i);
+    gm.statusFx.apply("muni", "plague", "t");
+    for (let d = 0; d < 3; d++) passDay(gm);
+    // plagueDay=3の日次処理で20%判定→severeDaysが定義されたか
+    if (gm.gs.party["muni"].status.plagueSevereDays !== undefined) severeAt3++;
+  }
+  const rate = severeAt3 / TRIALS;
+  assert(Math.abs(rate - 0.20) < 0.03, `3日目重症化率 実測=${rate.toFixed(3)} (設計0.20)`);
+});
+
+console.log("[M3.5] 夜イベント戦闘（M2フック接続）");
+
+test("[夢魔] 夢の中の1人戦闘: 敗北=昏睡(死なない)・勝利=安眠HP+10%", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 120;
+  // 敗北ケース（非保持者ムニの夢）
+  const b = gm.startDreamBattle("muni");
+  assertEq(b.allies.length, 1, "1人戦闘");
+  assert(b.availableCommands("muni").includes("attack"), "非保持者は攻撃可");
+  b.allies[0].state.hp = 0;
+  b.allies[0].state.downed = true;
+  b.finish();
+  const r = gm.settleDreamBattle("muni");
+  assertEq(r.deaths.length, 0, "死亡しない");
+  assertEq(gm.gs.party["muni"].exclusion, "coma", "昏睡");
+  assertEq(gm.gs.gameOver, null, "GOなし");
+
+  // 勝利ケース（保持者レニィの夢: 防御/逃げるのみ→勝利は仲間側のみ可能だがAPI検証として敵HP0に）
+  const gm2 = new GameManager();
+  gm2.newGame("renny", 42);
+  gm2.gs.day = 120;
+  const b2 = gm2.startDreamBattle("renny");
+  const cmds = b2.availableCommands("renny");
+  assert(cmds.includes("guard") && cmds.includes("flee") && !cmds.includes("attack"),
+    "保持者の夢でも掟は有効");
+  b2.allies[0].state.hp = Math.round(b2.allies[0].state.maxHp * 0.5);
+  b2.enemies[0].hp = 0;
+  b2.enemies[0].alive = false;
+  b2.finish();
+  const hpBefore = gm2.gs.party["renny"].hp;
+  gm2.settleDreamBattle("renny");
+  assert(gm2.gs.party["renny"].hp > hpBefore, "安眠HP+10%");
+});
+
+test("[夢魔] 敵Lv=眠った本人のLv（第8巻10-8）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.party["muni"].level = 37;
+  const b = gm.startDreamBattle("muni");
+  assertEq(b.enemies[0].level, 37, "本人Lv");
+});
+
+test("[夜襲] 夜イベント戦闘は時間を進めない（就寝処理の一部）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 70;
+  const dayBefore = gm.gs.day;
+  const slotBefore = gm.gs.slot;
+  const b = gm.startNightRaidBattle(["renny", "geru", "neo"]);
+  assert(b.enemies.every((e) => e.def.family === "demon"), "悪魔の夜襲");
+  b.enemies.forEach((e) => { e.hp = 0; e.alive = false; });
+  b.finish();
+  const r = gm.settleBattle();
+  assertEq(r.outcome, "victory", "勝利");
+  assertEq(gm.gs.day, dayBefore, "日付そのまま");
+  assertEq(gm.gs.slot, slotBefore, "時間帯そのまま");
+});
+
+test("[夜イベント] rollNightEvents: 61日目以降に夜襲が発生しうる・UI解決後は二重適用なし", () => {
+  const orig = JSON.parse(JSON.stringify(DB.config.night_raid.phases));
+  (DB.config.night_raid as any).phases = [[61, 1.0]]; // 100%化
+  try {
+    const gm = new GameManager();
+    gm.newGame("renny", 42);
+    gm.gs.day = 61;
+    const ev = gm.rollNightEvents();
+    assert(ev.raid, "61日目以降は夜襲発生");
+    // 解決済みフラグにより endDay 内で再ロールされない（昏睡の自動適用が起きない）
+    gm.gs.tribute.fireLastDay = gm.gs.day;
+    gm.gs.tribute.waterLastDay = gm.gs.day;
+    for (const c of Object.values(gm.gs.party)) { c.satiety = 100; c.starveDays = 0; }
+    gm.endDay();
+    assertEq(gm.gs.day, 62, "翌日へ");
+  } finally {
+    (DB.config.night_raid as any).phases = orig;
+  }
+});
+
+test("[夢イベント] rollNightEvents: レニィは遭遇率5%（100日目以降・強制ロール検証）", () => {
+  const origBase = DB.config.dream.rate_base;
+  const origRenny = DB.config.dream.rate_renny;
+  (DB.config.dream as any).rate_base = 0;
+  (DB.config.dream as any).rate_renny = 1.0; // レニィのみ100%化
+  try {
+    const gm = new GameManager();
+    gm.newGame("geru", 42);
+    gm.gs.day = 100;
+    const ev = gm.rollNightEvents();
+    assertEq(ev.dreamer, "renny", "レニィが夢を見る");
+    assertEq(gm.gs.party["renny"].exclusion, "none", "UI解決前は昏睡しない");
+  } finally {
+    (DB.config.dream as any).rate_base = origBase;
+    (DB.config.dream as any).rate_renny = origRenny;
+  }
 });
 
 console.log("[M2] 365日通し");

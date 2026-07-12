@@ -1,0 +1,9 @@
+; ホープシード M2骨格 - Godot 4.x
+config_version=5
+
+[application]
+config/name="HopeSeed"
+config/features=PackedStringArray("4.2")
+
+[autoload]
+; 本実装時は GameManager をここに登録する（テストは直接生成）

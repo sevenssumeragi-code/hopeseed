@@ -115,15 +115,6 @@ export class StatusEffectManager {
             + t.infect_severe_step * (st.infectDay - t.infect_severe_from_day);
           if (this.rng.chance(chance)) st.infectSevereDays = 0;
         }
-        if (this.rng.chance(t.infect_spread_rate)) {
-          const others = Object.values(this.gs.party).filter(
-            (o) => o.id !== c.id && o.exclusion === "none" && o.status.infectDay === undefined);
-          if (others.length > 0) {
-            const victim = this.rng.pick(others);
-            victim.status.infectDay = 0;
-            res.infected.push(victim.id);
-          }
-        }
       }
 
       // 肥満: 粗食7日で解消
@@ -154,20 +145,37 @@ export class StatusEffectManager {
       }
     }
 
-    // 空腹（第14巻18-4: −15%/日・探索日−20%・0%で毎日HP10%減・絶食7日で死亡）
+    // 感染症の伝染（M2仕様: 感染者が1人でもいる限り、1日1回10%で未感染の味方1人へ）
+    const infectedExists = Object.values(this.gs.party).some(
+      (c) => c.exclusion !== "dead" && c.exclusion !== "kidnapped" && c.status.infectDay !== undefined);
+    if (infectedExists && this.rng.chance(t.infect_spread_rate)) {
+      const targets = Object.values(this.gs.party).filter(
+        (o) => o.exclusion === "none" && o.status.infectDay === undefined);
+      if (targets.length > 0) {
+        const victim = this.rng.pick(targets);
+        victim.status.infectDay = 0;
+        res.infected.push(victim.id);
+      }
+    }
+
+    // 空腹（第14巻18-4・M2仕様: キャラ個別。−15%/日(探索−20%)・0%で毎日HP10%減・絶食7日で死亡）
     const decay = this.gs.exploredToday
       ? DB.config.hunger.decay_per_day_explore : DB.config.hunger.decay_per_day;
-    this.gs.hunger = Math.max(0, this.gs.hunger - decay);
     this.gs.exploredToday = false;
-    if (this.gs.hunger <= 0) {
-      this.gs.starvingDays++;
-      for (const c of Object.values(this.gs.party)) {
-        if (c.exclusion !== "none") continue;
+    for (const c of Object.values(this.gs.party)) {
+      if (c.exclusion === "dead" || c.exclusion === "kidnapped") continue;
+      c.satiety = Math.max(0, c.satiety - decay);
+      if (c.satiety <= 0) {
+        c.starveDays++;
         c.hp = Math.max(1, c.hp - Math.round(c.maxHp * DB.config.hunger.zero_daily_hp_loss));
+        if (c.starveDays >= DB.config.hunger.starve_death_days) {
+          c.exclusion = "dead";
+          res.deaths.push({ charId: c.id, cause: "starvation" });
+          if (c.id === this.gs.holder) res.starvation = true;
+        }
+      } else {
+        c.starveDays = 0;
       }
-      if (this.gs.starvingDays >= DB.config.hunger.starve_death_days) res.starvation = true;
-    } else {
-      this.gs.starvingDays = 0;
     }
 
     return res;

@@ -1,0 +1,63 @@
+{
+  "DAY_MAX": 365,
+  "TIME_SLOTS": ["morning", "noon", "evening", "night"],
+  "TIDE_HIGH_SLOTS": ["evening", "night"],
+  "TIDE_TIMER_SEC": 90,
+
+  "TRIBUTE_INTERVAL": 14,
+  "TRIBUTE_INTERVAL_GRACE": 28,
+  "TRIBUTE_STORM_SUPPRESS_DAYS": 2,
+
+  "REVIVE_COOLDOWN": 7,
+
+  "STARVE_DAYS": 7,
+  "HUNGER_DECAY_BASE": 15,
+  "HUNGER_DECAY_EXPLORE": 20,
+  "HUNGER_MEAL_RECOVER": 40,
+  "HUNGER_ZERO_HP_LOSS": 0.10,
+  "HUNGER_LOW_THRESHOLD": 30,
+
+  "POISON_DAYS": 7,
+  "BURN_DAYS": 7,
+  "BLEED_DAYS": 3,
+  "PLAGUE_SEVERE_START_DAY": 3,
+  "PLAGUE_SEVERE_BASE": 0.20,
+  "PLAGUE_SEVERE_STEP": 0.10,
+  "PLAGUE_SEVERE_DEATH_DAYS": 3,
+  "INFECT_SEVERE_START_DAY": 6,
+  "INFECT_SEVERE_BASE": 0.05,
+  "INFECT_SEVERE_STEP": 0.05,
+  "INFECT_SPREAD_RATE": 0.10,
+  "INFECT_SEVERE_DEATH_DAYS": 3,
+  "COMA_RECOVER_MIN_DAYS": 3,
+  "COMA_RECOVER_MAX_DAYS": 5,
+
+  "NIGHT_RAID_RATE_PHASES": [
+    {"from_day": 61,  "rate": 0.08},
+    {"from_day": 200, "rate": 0.12},
+    {"from_day": 301, "rate": 0.15}
+  ],
+  "DREAM_RATE": 0.02,
+  "DREAM_RATE_RENNY": 0.05,
+  "DREAM_START_DAY": 100,
+
+  "AUTOSAVE_SLOTS": 3,
+
+  "WEATHER_SEASONS": [
+    {"name": "spring", "from_day": 1,   "to_day": 91},
+    {"name": "summer", "from_day": 92,  "to_day": 183},
+    {"name": "autumn", "from_day": 184, "to_day": 274},
+    {"name": "winter", "from_day": 275, "to_day": 365}
+  ],
+  "WEATHER_TABLE": {
+    "spring": {"sunny": 0.50, "cloudy": 0.20, "rain": 0.15, "storm": 0.05, "fog": 0.08, "ash": 0.02},
+    "summer": {"sunny": 0.55, "cloudy": 0.10, "rain": 0.15, "storm": 0.15, "fog": 0.03, "ash": 0.02},
+    "autumn": {"sunny": 0.45, "cloudy": 0.20, "rain": 0.20, "storm": 0.10, "fog": 0.03, "ash": 0.02},
+    "winter": {"sunny": 0.40, "cloudy": 0.25, "rain": 0.15, "storm": 0.05, "fog": 0.13, "ash": 0.02}
+  },
+
+  "HOLDER_TRIBUTE_GRACE": {
+    "jinpachi": "fire",
+    "renny": "water"
+  }
+}

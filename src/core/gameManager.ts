@@ -51,6 +51,8 @@ export class GameManager {
   currentBattle: BattleManager | null = null;
   lastEndingId: string | null = null;
   pendingNightRaid = false;
+  private nightEventsResolved = false;
+  private nightEventBattle = false;
 
   newGame(holderId: string, seed?: number): void {
     if (!HOLDER_CANDIDATES.includes(holderId)) throw new Error(`invalid holder: ${holderId}`);
@@ -68,9 +70,8 @@ export class GameManager {
       foodStock: [],
       silver: 0,
       trust: TrustManager.initTrust(),
-      tribute: { fireLastDay: 1, waterLastDay: 1, fireCount: 0, waterCount: 0 },
-      hunger: DB.config.hunger.max_gauge,
-      starvingDays: 0,
+      // M2仕様: Day0=漂着時に女神へ挨拶済み扱い（供物ゼロならDay15朝にGO）
+      tribute: { fireLastDay: 0, waterLastDay: 0, fireCount: 0, waterCount: 0 },
       exploredToday: false,
       reviveLastDay: 0,
       stats: {
@@ -155,33 +156,43 @@ export class GameManager {
     for (const d of tick.deaths) {
       if (d.charId === this.gs.holder) { this.triggerGameOver("holder_death"); return; }
     }
-    if (tick.starvation) { this.triggerGameOver("holder_death"); return; }
 
     const expired = this.tribute.checkExpiry();
     if (expired) { this.triggerGameOver(expired); return; }
     this.achievements.check();
   }
 
-  private sleepTick(): void {
-    // 夜襲判定（第14巻18-6: 61日目〜8%→200日〜12%→301日〜15%）
-    this.pendingNightRaid = false;
+  // 就寝前の夜イベント判定（M2のSleepTickフックをUI戦闘へ接続）。
+  // UIはこれを呼び、raid/dreamerがあれば戦闘を挟んでから endDay() を呼ぶ。
+  rollNightEvents(): { raid: boolean; dreamer: string | null } {
+    this.nightEventsResolved = true;
+    let raid = false;
     let raidRate = 0;
     for (const [fromDay, rate] of DB.config.night_raid.phases as [number, number][]) {
       if (this.gs.day >= fromDay) raidRate = rate;
     }
-    if (raidRate > 0 && this.rng.chance(raidRate)) this.pendingNightRaid = true;
+    if (raidRate > 0 && this.rng.chance(raidRate)) raid = true;
 
-    // 夢魔遭遇判定（第14巻18-7: 100日目以降2%/レニィ5%・王撃破後半減）
+    let dreamer: string | null = null;
     if (this.gs.day >= DB.config.dream.active_from_day) {
       for (const c of this.party.getActiveMembers()) {
         let rate = c.id === "renny" ? DB.config.dream.rate_renny : DB.config.dream.rate_base;
         if (this.gs.flags["nightmare_king_defeated"]) rate *= DB.config.dream.king_defeat_mult;
-        if (this.rng.chance(rate)) {
-          this.statusFx.apply(c.id, "coma", "nightmare");
-          break; // 一晩に1人
-        }
+        if (this.rng.chance(rate)) { dreamer = c.id; break; } // 一晩に1人
       }
     }
+    this.pendingNightRaid = raid;
+    return { raid, dreamer };
+  }
+
+  private sleepTick(): void {
+    // UI経由で夜イベント解決済みならスキップ。ヘッドレス（テスト等）は自動解決:
+    // 夢魔遭遇=自動昏睡（戦わず取り憑かれた扱い）・夜襲=フラグのみ。
+    if (!this.nightEventsResolved) {
+      const ev = this.rollNightEvents();
+      if (ev.dreamer) this.statusFx.apply(ev.dreamer, "coma", "nightmare");
+    }
+    this.nightEventsResolved = false;
 
     // 雨天野宿の感染症（第14巻18-4: 20%）— 拠点泊は屋根ありとして半減【AI提案】
     const wx = this.weather.effects(this.gs.weather);
@@ -210,10 +221,6 @@ export class GameManager {
     const item = DB.items[entry.dishId];
     this.gs.foodStock.splice(stockIndex, 1);
 
-    // 満腹+40%（品質問わず）
-    this.gs.hunger = Math.min(DB.config.hunger.max_gauge,
-      this.gs.hunger + DB.config.hunger.meal_restore);
-
     const hpRatio = entry.quality === "great" ? DB.config.craft.food_hp_great
       : entry.quality === "normal" ? DB.config.craft.food_hp_normal
       : DB.config.craft.food_hp_poor;
@@ -228,6 +235,8 @@ export class GameManager {
     let msg = entry.quality === "great" ? `「${item.great_name}」を味わった！` : `${item.name}を食べた。`;
     for (const c of eaters) {
       if (!c) continue;
+      // 満腹+40%（品質問わず・キャラ個別）
+      c.satiety = Math.min(DB.config.hunger.max_gauge, c.satiety + DB.config.hunger.meal_restore);
       c.hp = Math.min(c.maxHp, c.hp + Math.round(c.maxHp * hpRatio));
       if (special["sp_full"]) c.sp = c.maxSp;
       else c.sp = Math.min(c.maxSp, c.sp + Math.round(c.maxSp * spRatio));
@@ -258,7 +267,7 @@ export class GameManager {
     if (!c) return { ok: false, message: "誰が食べる？" };
     if (!item.raw_edible && !item.raw_risk) return { ok: false, message: "生では食べられない。調理が必要だ。" };
     this.gs.inventory[itemId]--;
-    this.gs.hunger = Math.min(DB.config.hunger.max_gauge, this.gs.hunger + 10);
+    c.satiety = Math.min(DB.config.hunger.max_gauge, c.satiety + 10);
     let msg = `${item.name}をかじった。`;
     if (item.raw_edible) {
       c.hp = Math.min(c.maxHp, c.hp + Math.round(c.maxHp * item.raw_edible.hp_ratio));
@@ -396,9 +405,11 @@ export class GameManager {
       this.triggerGameOver(result.goReason);
     } else {
       this.phase = DB.maps[this.gs.location].is_base ? "base" : "map";
-      this.advanceTime(1);
+      // 夜イベント戦闘（夢魔・夜襲）は就寝処理の一部なので時間を進めない
+      if (!this.nightEventBattle) this.advanceTime(1);
       this.achievements.check();
     }
+    this.nightEventBattle = false;
     this.currentBattle = null;
     return result;
   }
@@ -457,6 +468,60 @@ export class GameManager {
     if (u["coma_count_min"] !== undefined && this.gs.stats.comaTotal < (u["coma_count_min"] as number)) return false;
     if (u["tide"] !== undefined && this.gs.tide !== u["tide"]) return false;
     return true;
+  }
+
+  // 夢の中の戦闘（第8巻10-8: 眠った本人1人。敵Lv=本人のLv。勝利=安眠HP+10%/敗北=昏睡）
+  startDreamBattle(dreamerId: string): BattleManager {
+    const dreamer = this.gs.party[dreamerId];
+    const ctx: BattleContext = {
+      location: "dream", slot: "night", tide: "low",
+      isBoss: false, weatherHitPenalty: 0, areaLvMod: 0,
+    };
+    this.nightEventBattle = true;
+    this.currentBattle = new BattleManager(
+      ["nightmare"], [dreamer],
+      // 夢の主が保持者でない場合、保持者制限は夢の主に適用されない
+      dreamerId === this.gs.holder ? this.gs.holder : "__none__",
+      ctx, this.rng, (id) => this.trust.avgOf(id),
+    );
+    this.phase = "battle";
+    return this.currentBattle;
+  }
+
+  // 夢戦闘の後処理: 勝利=安眠(HP+10%)・敗北/逃走=昏睡（敗北時のみ）
+  settleDreamBattle(dreamerId: string): BattleResult {
+    const result = this.settleBattle();
+    const c = this.gs.party[dreamerId];
+    if (result.outcome === "victory") {
+      c.hp = Math.min(c.maxHp, c.hp + Math.round(c.maxHp * 0.10));
+    } else if (result.outcome === "defeat") {
+      c.downed = false;
+      c.hp = Math.max(1, c.hp);
+      this.statusFx.apply(dreamerId, "coma", "nightmare");
+    }
+    return result;
+  }
+
+  // 夜襲戦闘（第14巻18-6）: 拠点に悪魔1〜2体【AI提案: 対象選択式は第9巻12-5-2受領後に差替】
+  startNightRaidBattle(memberIds: string[]): BattleManager {
+    const count = this.rng.int(1, 2);
+    const ctx: BattleContext = {
+      location: "base", slot: "night", tide: "low",
+      isBoss: false, weatherHitPenalty: 0, areaLvMod: 0,
+    };
+    this.nightEventBattle = true;
+    const members = memberIds
+      .map((id) => this.gs.party[id])
+      .filter((c) => c && c.exclusion === "none" && c.comaDaysLeft === 0);
+    if (!members.some((m) => m.id === this.gs.holder)) {
+      throw new Error("holder must join the battle party");
+    }
+    this.currentBattle = new BattleManager(
+      Array(count).fill("demon"), members, this.gs.holder, ctx, this.rng,
+      (id) => this.trust.avgOf(id),
+    );
+    this.phase = "battle";
+    return this.currentBattle;
   }
 
   triggerGameOver(reason: GOReason): void {

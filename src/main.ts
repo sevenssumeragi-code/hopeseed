@@ -13,6 +13,7 @@ const gm = new GameManager();
 let field: FieldState | null = null;
 let battle: BattleManager | null = null;
 let battleMembers: string[] = [];
+let nightBattle: { kind: "dream"; dreamer: string } | { kind: "raid" } | null = null;
 let logBuffer: string[] = [];
 let fieldRAF = 0;
 
@@ -38,6 +39,8 @@ function renderHUD(): void {
   const el = $("#hud");
   if (!gm.gs) { el.innerHTML = ""; return; }
   const slotNames: Record<string, string> = { morning: "朝", noon: "昼", evening: "夕", night: "夜" };
+  const active = gm.party.getActiveMembers();
+  const minSatiety = active.length > 0 ? Math.min(...active.map((c) => c.satiety)) : 0;
   const fireLeft = gm.tribute.remainingDays("fire");
   const waterLeft = gm.tribute.remainingDays("water");
   const holder = DB.characters[gm.gs.holder].name;
@@ -47,7 +50,7 @@ function renderHUD(): void {
     <div class="hud-item"><span class="hud-label">天候</span><span class="hud-value">${gm.weather.name(gm.gs.weather)}</span></div>
     <div class="hud-item"><span class="hud-label">潮</span><span class="hud-value">${gm.gs.tide === "high" ? "満潮" : "干潮"}</span></div>
     <div class="hud-item"><span class="hud-label">保持者</span><span class="hud-value">🌱${holder}</span></div>
-    <div class="hud-item"><span class="hud-label">空腹</span><span class="hud-value ${gm.gs.hunger <= 30 ? "warn" : ""}">${gm.gs.hunger}/100</span></div>
+    <div class="hud-item"><span class="hud-label">空腹(最少)</span><span class="hud-value ${minSatiety <= 30 ? "warn" : ""}">${minSatiety}/100</span></div>
     <div class="hud-item"><span class="hud-label">銀貨</span><span class="hud-value">${gm.gs.silver}</span></div>
     <div class="hud-item"><span class="hud-label">炎の供物</span><span class="hud-value ${fireLeft <= 3 ? "warn" : ""}">あと${fireLeft}日</span></div>
     <div class="hud-item"><span class="hud-label">水の供物</span><span class="hud-value ${waterLeft <= 3 ? "warn" : ""}">あと${waterLeft}日</span></div>
@@ -240,20 +243,37 @@ function renderBase(): void {
     detail.innerHTML = `<h3 class="section-title">なにを食べる？（料理は保存3日）</h3>
       <div class="row">${dishBtns || "<i>料理のストックがない。調理しよう。</i>"}</div>
       <div class="row">${rawBtns}</div>`;
+    const pickEater = (onPick: (id: string) => void) => {
+      const members = gm.party.getActiveMembers();
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = "<b>誰が食べる？</b> " + members.map((c) =>
+        `<button class="small eater-btn" data-id="${c.id}">${DB.characters[c.id].name}（満腹${Math.round(c.satiety)}）</button>`).join(" ");
+      detail.appendChild(row);
+      row.querySelectorAll(".eater-btn").forEach((eb) => {
+        (eb as HTMLElement).onclick = () => onPick((eb as HTMLElement).dataset.id!);
+      });
+    };
     detail.querySelectorAll(".dish-btn").forEach((b) => {
       (b as HTMLElement).onclick = () => {
-        const r = gm.eatDish(Number((b as HTMLElement).dataset.i), gm.gs.holder);
-        log(r.message + ` 空腹 ${gm.gs.hunger}/100`);
-        gm.advanceTime(1);
-        checkEvents();
-        renderPhase();
+        const i = Number((b as HTMLElement).dataset.i);
+        pickEater((eaterId) => {
+          const r = gm.eatDish(i, eaterId);
+          log(r.message);
+          gm.advanceTime(1);
+          checkEvents();
+          renderPhase();
+        });
       };
     });
     detail.querySelectorAll(".raw-btn").forEach((b) => {
       (b as HTMLElement).onclick = () => {
-        const r = gm.eatRaw((b as HTMLElement).dataset.id!, gm.gs.holder);
-        log(r.message + ` 空腹 ${gm.gs.hunger}/100`);
-        renderPhase();
+        const id = (b as HTMLElement).dataset.id!;
+        pickEater((eaterId) => {
+          const r = gm.eatRaw(id, eaterId);
+          log(r.message);
+          renderPhase();
+        });
       };
     });
   };
@@ -356,11 +376,23 @@ function renderBase(): void {
     playEvent(evs[0].id);
   };
   $("#b-rest").onclick = () => {
-    log("みんなで眠りについた…");
-    gm.endDay();
-    checkEvents();
-    renderPhase();
-    if (gm.gs && !gm.gs.gameOver) log(`${gm.gs.day}日目の朝。天候は${(DB.weather.types as any)[gm.gs.weather].name}。`);
+    const ev = gm.rollNightEvents();
+    if (ev.raid) {
+      log("闇の気配——悪魔の夜襲だ！", true);
+      openNightRaidSelect();
+      return;
+    }
+    if (ev.dreamer) {
+      const name = DB.characters[ev.dreamer].name;
+      log(`${name}は不穏な夢に呑まれていく——夢魔との戦いだ！`, true);
+      nightBattle = { kind: "dream", dreamer: ev.dreamer };
+      battle = gm.startDreamBattle(ev.dreamer);
+      pendingCommands = [];
+      commandIndex = 0;
+      renderPhase();
+      return;
+    }
+    finishSleep();
   };
   $("#b-out").onclick = () => {
     // 拠点からの行き先を選ぶ（拠点マップの接続先）
@@ -784,11 +816,27 @@ function execBattleTurn(): void {
 
   // 戦闘終了
   const beforeSettle = b.log.lines.length;
-  const result = gm.settleBattle();
+  const nb = nightBattle;
+  nightBattle = null;
+  const result = nb?.kind === "dream"
+    ? gm.settleDreamBattle(nb.dreamer)
+    : gm.settleBattle();
   for (const line of b.log.lines.slice(beforeSettle)) log(line, true);
   battle = null;
 
   if (gm.phase === "gameover") { renderPhase(); return; }
+  if (nb) {
+    if (nb.kind === "dream") {
+      const name = DB.characters[nb.dreamer].name;
+      if (result.outcome === "victory") log(`${name}は夢魔を打ち払い、安らかな眠りについた。（HP+10%）`, true);
+      else if (result.outcome === "defeat") log(`${name}は悪夢に呑まれ、昏睡状態に陥った…（3〜5日で目覚める）`, true);
+      else log(`${name}は夢から逃れ、浅い眠りについた。`);
+    } else {
+      if (result.outcome === "victory") log("悪魔の夜襲を退けた！", true);
+    }
+    finishSleep();
+    return;
+  }
   for (const dead of result.deaths) {
     log(`${DB.characters[dead].name}は帰らぬ人となった…（湖の祠で蘇生できる）`, true);
   }
@@ -800,6 +848,54 @@ function execBattleTurn(): void {
   }
   checkEvents();
   renderPhase();
+}
+
+// ============ 夜イベント（M2 SleepTickフック接続）============
+function finishSleep(): void {
+  log("みんなで眠りについた…");
+  gm.endDay();
+  checkEvents();
+  renderPhase();
+  if (gm.gs && !gm.gs.gameOver && gm.phase !== "ending") {
+    log(`${gm.gs.day}日目の朝。天候は${gm.weather.name(gm.gs.weather)}。`);
+  }
+}
+
+function openNightRaidSelect(): void {
+  const active = gm.party.getActiveMembers();
+  battleMembers = [gm.gs.holder];
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  const memberBtns = active.map((c) => {
+    const isHolder = c.id === gm.gs.holder;
+    return `<button class="small mem-btn ${isHolder ? "selected" : ""}" data-id="${c.id}" ${isHolder ? "disabled" : ""}>
+      ${isHolder ? "🌱" : ""}${DB.characters[c.id].name} Lv${c.level}</button>`;
+  }).join(" ");
+  back.innerHTML = `<div class="modal"><h2>😈 悪魔の夜襲！</h2>
+    <p>拠点を守るメンバーを選べ（最大${DB.config.BATTLE_MEMBERS_MAX}人・保持者は必ず参加）</p>
+    <div class="row" style="margin-top:10px">${memberBtns}</div>
+    <div class="modal-actions"><button id="raid-start">迎え撃つ</button></div></div>`;
+  document.body.appendChild(back);
+  back.querySelectorAll(".mem-btn:not([disabled])").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      const id = (b as HTMLElement).dataset.id!;
+      if (battleMembers.includes(id)) {
+        battleMembers = battleMembers.filter((x) => x !== id);
+        b.classList.remove("selected");
+      } else if (battleMembers.length < DB.config.BATTLE_MEMBERS_MAX) {
+        battleMembers.push(id);
+        b.classList.add("selected");
+      }
+    };
+  });
+  (back.querySelector("#raid-start") as HTMLElement).onclick = () => {
+    back.remove();
+    nightBattle = { kind: "raid" };
+    battle = gm.startNightRaidBattle(battleMembers);
+    pendingCommands = [];
+    commandIndex = 0;
+    renderPhase();
+  };
 }
 
 // ============ ドグの店（第7巻8-0: 購入=売値×3）============

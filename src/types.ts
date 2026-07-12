@@ -113,6 +113,8 @@ export interface CharacterState {
   hitDebuffTurns: number;
   protectRateBuff: number;             // 庇う成功率補正%
   protectRateTurns: number;
+  satiety: number;                     // 空腹ゲージ(キャラ個別・M2仕様)
+  starveDays: number;                  // 満腹0の連続日数(7で餓死)
   atkBuffNextBattle: number;           // 海賊風煮込み
   equippedWeapon: string | null;
   downed: boolean;
@@ -267,8 +269,6 @@ export interface GameState {
     fireLastDay: number; waterLastDay: number;
     fireCount: number; waterCount: number;
   };
-  hunger: number;
-  starvingDays: number;
   exploredToday: boolean;
   reviveLastDay: number;
   stats: {
