@@ -25,7 +25,7 @@ body {
 
 #app {
   display: grid;
-  grid-template-rows: 56px 1fr 160px;
+  grid-template-rows: auto 1fr 160px;
   height: 100vh;
   max-width: 1600px;
   margin: 0 auto;
@@ -48,6 +48,17 @@ body {
 #hud .hud-value { font-weight: bold; }
 #hud .warn { color: var(--danger); animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: 0.4; } }
+
+/* パーティ簡易バー（第13巻16-1） */
+.hud-party { display: flex; gap: 12px; align-items: center; margin-left: auto; padding: 4px 0; }
+.mini-bar { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; }
+.mini-bar.excluded { color: #778; text-decoration: line-through; }
+
+/* 行動順表示（第13巻16-4） */
+.turn-order {
+  font-size: 12px; color: #9ab; padding: 4px 16px;
+  background: rgba(16,20,24,0.6); border-bottom: 1px solid var(--border);
+}
 
 /* --- Screen --- */
 #screen { position: relative; overflow: hidden; background: #0a0e12; }

@@ -32,6 +32,7 @@ export class CraftManager {
       apt += DB.config.craft.muni_assist_bonus;                                 // ムニ同行
     }
     if (c && c.status.plagueDay !== undefined) apt -= DB.config.status_timers.plague_craft_penalty;
+    if (this.gs.weather === "rain") apt += 5; // 雨の日は作業に最適（第3巻4-5【AI提案】）
     return apt;
   }
 
@@ -64,6 +65,30 @@ export class CraftManager {
     return recipe.inputs.every(
       (inp: { item: string; qty: number }) => (this.gs.inventory[inp.item] ?? 0) >= inp.qty,
     );
+  }
+
+  // 成功率プレビュー（第13巻16-7: 実行キャラ切替でリアルタイム再計算）
+  ratesFor(type: CraftType, crafterId: string, recipe: any): { great: number; success: number; fail: number } {
+    let bonus = recipe?.craft_bonus ?? 0;
+    if (recipe?.catalyst && (this.gs.inventory[recipe.catalyst.item] ?? 0) > 0) {
+      bonus += recipe.catalyst.bonus;
+    }
+    const apt = this.aptitude(type, crafterId, bonus);
+    const greatLine = apt * DB.config.craft.great_coef;
+    const failPct = Math.max(DB.config.craft.fail_floor, DB.config.craft.fail_base - greatLine);
+    const great = Math.min(100, Math.max(0, greatLine));
+    const fail = Math.min(100 - great, failPct);
+    return { great: Math.round(great), success: Math.round(100 - great - fail), fail: Math.round(fail) };
+  }
+
+  // ひらめき（第7巻9-3: 素材が揃った状態で調合台を調べると解放）
+  isRecipeKnown(recipe: any): boolean {
+    if (this.gs.flags[`recipe_known_${recipe.id}`]) return true;
+    if (this.canCraft(recipe)) {
+      this.gs.flags[`recipe_known_${recipe.id}`] = true;
+      return true;
+    }
+    return false;
   }
 
   craft(type: CraftType, recipeId: string, crafterId: string): CraftResult {

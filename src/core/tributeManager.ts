@@ -34,6 +34,7 @@ export class TributeManager {
     this.gs.inventory[itemId]--;
     if (goddess === "fire") { this.gs.tribute.fireLastDay = this.gs.day; this.gs.tribute.fireCount++; }
     else { this.gs.tribute.waterLastDay = this.gs.day; this.gs.tribute.waterCount++; }
+    this.gs.journal?.tributes.push({ day: this.gs.day, goddess }); // 日誌（第13巻16-2）
     return { ok: true, line: lines.offer_ok };
   }
 

@@ -79,9 +79,10 @@ export class GameManager {
       protectCounts: {},
       halfTimeAccrued: false,
       lastDriftDay: 0,
+      journal: { tributes: [], revives: [], events: [] },
       gameOver: null,
       rngSeed,
-      version: 2,
+      version: 3,
     };
     this.bindManagers();
     this.phase = "base";
@@ -102,6 +103,7 @@ export class GameManager {
   loadGame(slotId: string): boolean {
     const gs = this.save.loadSlot(slotId);
     if (!gs) return false;
+    gs.journal ??= { tributes: [], revives: [], events: [] };
     this.gs = gs;
     this.rng = new RNG(gs.rngSeed);
     this.bindManagers();
@@ -334,9 +336,14 @@ export class GameManager {
       this.gs.flags[`used_${req}`] = true;
     }
     const cost = current.costs?.[mapId] ?? 1;
+    const wasBase = current.is_base === true;
     this.gs.location = mapId;
     this.gs.exploredToday = true;
     this.phase = DB.maps[mapId].is_base ? "base" : "map";
+    // フェーズ遷移時オートセーブ（第13巻17-1: 拠点⇄マップ、マップ⇄海賊船）
+    if (wasBase !== (DB.maps[mapId].is_base === true) || mapId === "pirate_ship") {
+      this.save.autosave(this.gs);
+    }
     // 毒の移動ダメージ＋しびれ移動死判定（第14巻18-4）
     this.statusFx.poisonMoveTick();
     const deaths = this.statusFx.paralysisMoveCheck(mapId, this.gs.tide);
@@ -406,6 +413,8 @@ export class GameManager {
       areaLvMod: AREA_LV_MOD[this.gs.location] ?? 0,
       waterGraceActive: this.tribute.remainingDays("water") >= 0,
     };
+    // ボス戦・重要イベント直前のオートセーブ（第13巻17-1: GO時のリトライ用）
+    if (isBoss) this.save.autosave(this.gs);
     this.currentBattle = new BattleManager(
       enemyIds, members, this.gs.holder, ctx, this.rng,
       (a, b) => this.trust.pair(a, b),
@@ -516,7 +525,32 @@ export class GameManager {
     }
     this.nightEventBattle = false;
     this.currentBattle = null;
+    // 戦闘終了直後のオートセーブ（第13巻17-1: 勝利・逃走とも。GO時はフラグ更新のみ扱いで保存しない）
+    if (!result.goReason) this.save.autosave(this.gs);
     return result;
+  }
+
+  // ============ 看病（第7巻9-4）============
+  // 昏睡・感染症の仲間に付き添う。感染症の重症化判定をその日1回スキップ。
+  // 看病者はその時間帯行動不可（=1時間帯消費）。
+  nurse(nurseId: string, patientId: string): { ok: boolean; message: string } {
+    const nurse = this.gs.party[nurseId];
+    const patient = this.gs.party[patientId];
+    if (!nurse || nurse.exclusion !== "none" || nurse.comaDaysLeft > 0) {
+      return { ok: false, message: "看病できる状態ではない。" };
+    }
+    if (!this.craft.canWork(nurseId)) {
+      return { ok: false, message: `${DB.characters[nurseId].name}は看病ができる状態ではない。` };
+    }
+    const needsCare = patient
+      && (patient.comaDaysLeft > 0 || patient.status.infectDay !== undefined);
+    if (!needsCare) return { ok: false, message: "看病の必要はないようだ。" };
+    patient.status.nursedToday = true;
+    this.advanceTime(1);
+    return {
+      ok: true,
+      message: `${DB.characters[nurseId].name}は${DB.characters[patientId].name}に付き添った。`,
+    };
   }
 
   // ============ ドグ商店（第7巻8-0）============

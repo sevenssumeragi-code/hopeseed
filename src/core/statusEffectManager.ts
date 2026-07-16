@@ -110,11 +110,14 @@ export class StatusEffectManager {
             res.deaths.push({ charId: c.id, cause: "infection" });
             continue;
           }
+        } else if (st.nursedToday) {
+          // 看病: 重症化判定をその日1回スキップ（第7巻9-4）
         } else if (st.infectDay >= t.infect_severe_from_day) {
           const chance = t.infect_severe_base
             + t.infect_severe_step * (st.infectDay - t.infect_severe_from_day);
           if (this.rng.chance(chance)) st.infectSevereDays = 0;
         }
+        delete st.nursedToday;
       }
 
       // 肥満: 粗食7日で解消

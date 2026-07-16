@@ -65,6 +65,7 @@ export class EventManager {
     }
     for (const f of ev.sets_flags ?? []) this.gs.flags[f] = true;
     this.gs.flags[`${ev.id}_played`] = true;
+    this.gs.journal?.events.push({ day: this.gs.day, id: ev.id }); // 日誌（第13巻16-2）
     if (ev.core) {
       this.gs.flags[`core_${ev.id}`] = true;
     }

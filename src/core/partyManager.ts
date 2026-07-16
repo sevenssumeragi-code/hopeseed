@@ -56,6 +56,7 @@ export class PartyManager {
     c.status = {};
     this.gs.reviveLastDay = this.gs.day;
     this.gs.stats.revived++;
+    this.gs.journal?.revives.push({ day: this.gs.day, charId }); // 日誌（第13巻16-2）
     return true;
   }
 

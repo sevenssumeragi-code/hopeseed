@@ -204,6 +204,18 @@ export class BattleManager {
     return cmds;
   }
 
+  // かばう成功率プレビュー（第13巻16-4: 対象選択時にリアルタイム表示）
+  protectRatePreview(fromId: string, toId: string): number {
+    const a = this.allies.find((x) => x.state.id === fromId);
+    if (!a) return 0;
+    let bonus = a.state.protectRateBuff;
+    const w = a.state.equippedWeapon ? DB.items[a.state.equippedWeapon] : null;
+    if (w?.protect_bonus) bonus += w.protect_bonus;
+    if (this.holderId === "muni") bonus += DB.config.protect.muni_holder_bonus;
+    return Math.round(protectRate(
+      this.allyEffSkl(a.state), this.pairTrust(fromId, toId), bonus));
+  }
+
   learnedSkills(actorId: string): [string, Skill][] {
     const level = this.allies.find((a) => a.state.id === actorId)?.state.level ?? 1;
     return skillsForCharacter(actorId)

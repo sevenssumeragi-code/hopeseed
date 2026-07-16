@@ -1319,6 +1319,117 @@ test("[夢イベント] rollNightEvents: レニィは遭遇率5%（100日目以�
   }
 });
 
+console.log("[M5] 拠点・クラフト・UI（第7巻＋第13巻16章）");
+
+test("[看病] 感染症の重症化判定をその日1回スキップ（第7巻9-4）", () => {
+  const t = DB.config.status_timers as any;
+  const orig = { base: t.infect_severe_base, step: t.infect_severe_step, spread: t.infect_spread_rate };
+  t.infect_severe_base = 1.0; t.infect_severe_step = 0; t.infect_spread_rate = 0;
+  try {
+    const gm = new GameManager();
+    gm.newGame("renny", 42);
+    gm.gs.party["muni"].status.infectDay = t.infect_severe_from_day; // 次tickで重症化判定日
+    const r = gm.nurse("geru", "muni");
+    assert(r.ok, "看病成功");
+    assertEq(gm.gs.party["muni"].status.nursedToday, true, "看病フラグが立つ");
+    assertEq(gm.gs.slot, "noon", "看病で1時間帯消費");
+    passDay(gm); // 100%重症化のはずが看病でスキップ
+    assertEq(gm.gs.party["muni"].status.infectSevereDays, undefined, "重症化スキップ");
+    assertEq(gm.gs.party["muni"].status.nursedToday, undefined, "フラグは1日で消える");
+    passDay(gm); // 看病なし → 100%で重症化
+    assertEq(gm.gs.party["muni"].status.infectSevereDays, 0, "看病なしなら重症化");
+  } finally {
+    t.infect_severe_base = orig.base; t.infect_severe_step = orig.step; t.infect_spread_rate = orig.spread;
+  }
+});
+
+test("[看病] 健康な相手・作業不能な看病者は不可", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  assert(!gm.nurse("geru", "hyu").ok, "健康な相手には不要");
+  gm.gs.party["geru"].status.bleed = 3; // 大出血=作業不可
+  gm.gs.party["muni"].status.infectDay = 1;
+  assert(!gm.nurse("geru", "muni").ok, "大出血の看病者は不可");
+});
+
+test("[クラフト] 成功率プレビューratesFor: ゲル薬学90（第13巻16-7）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42); // ゲル保持者補正なし
+  gm.gs.weather = "clear";
+  gm.gs.party["muni"].comaDaysLeft = 1; // ムニ同行補正を除外
+  // 適性90: 大成功31.5%→31（浮動小数の丸め）／失敗max(5,40−31.5)=8.5→9／成功60
+  const r1 = gm.craft.ratesFor("pharmacy", "geru", {});
+  assertEq(r1.great, 31, "大成功31%");
+  assertEq(r1.success, 60, "成功60%");
+  assertEq(r1.fail, 9, "失敗9%");
+  // ムニ同行+5 → 適性95: 大成功33.25→33／失敗6.75→7
+  gm.gs.party["muni"].comaDaysLeft = 0;
+  const r2 = gm.craft.ratesFor("pharmacy", "geru", {});
+  assertEq(r2.great, 33, "ムニ同行で大成功33%");
+  assertEq(r2.fail, 7, "失敗7%");
+});
+
+test("[クラフト] ひらめき: 素材が揃うと解放・以後は素材を失っても既知（第7巻9-3）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  const recipe = DB.recipes.pharmacy.find((r) => r.id === "plague_cure")!;
+  gm.gs.inventory["herb_green"] = 0;
+  gm.gs.inventory["herb_blue"] = 0;
+  assert(!gm.craft.isRecipeKnown(recipe), "素材なし=未ひらめき");
+  gm.gs.inventory["herb_green"] = 2;
+  gm.gs.inventory["herb_blue"] = 1;
+  assert(gm.craft.isRecipeKnown(recipe), "素材が揃うとひらめく");
+  gm.gs.inventory["herb_green"] = 0;
+  gm.gs.inventory["herb_blue"] = 0;
+  assert(gm.craft.isRecipeKnown(recipe), "一度ひらめけば素材を失っても既知");
+});
+
+test("[セーブ] 手動10スロット＋メタ情報（第13巻17-3）", () => {
+  const gm = new GameManager();
+  gm.newGame("hyu", 42);
+  gm.gs.day = 12;
+  for (let i = 1; i <= 10; i++) gm.save.saveManual(i, gm.gs);
+  assertEq(gm.save.allSlotIds().length, 13, "オート3+手動10=13スロット");
+  const meta = gm.save.readMeta("manual_10");
+  assert(meta !== null, "メタあり");
+  assertEq(meta!.day, 12, "メタ:日数");
+  assertEq(meta!.holder, "hyu", "メタ:保持者");
+  const alive = Object.values(gm.gs.party).filter((c) => c.exclusion === "none").length;
+  assertEq(meta!.aliveCount, alive, "メタ:生存数");
+  assert(gm.save.readMeta("manual_9") !== null, "手動9も保存済み");
+});
+
+test("[オートセーブ] 戦闘終了直後・ボス戦直前に自動保存（第13巻17-1）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 77;
+  const b = gm.startBattle(["boar"], ["hyu"]);
+  b.enemies.forEach((e) => { e.hp = 0; e.alive = false; });
+  b.finish();
+  gm.settleBattle();
+  const autos = () => ["auto_0", "auto_1", "auto_2"].map((id) => gm.save.readMeta(id));
+  assert(autos().some((m) => m?.day === 77), "戦闘終了後にオートセーブ");
+  gm.gs.day = 88;
+  gm.startBattle(["deep_sea_nushi"], ["hyu", "jinpachi"], true, "deep_sea_nushi");
+  assert(autos().some((m) => m?.day === 88), "ボス戦開始直前にオートセーブ");
+});
+
+test("[日誌] 供物・蘇生・イベントが記録される（第13巻16-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.inventory["meat"] = 1;
+  assert(gm.tribute.offer("fire", "meat").ok, "供物OK");
+  assertEq(gm.gs.journal.tributes.length, 1, "供物が日誌に載る");
+  assertEq(gm.gs.journal.tributes[0].goddess, "fire", "炎と記録");
+  const ev = gm.events.play(DB.scenarios[0].id);
+  assert(ev !== null, "イベント再生");
+  assert(gm.gs.journal.events.some((e) => e.id === DB.scenarios[0].id), "イベントが日誌に載る");
+  gm.gs.party["neo"].exclusion = "dead";
+  gm.gs.party["neo"].hp = 0;
+  assert(gm.party.revive("neo"), "蘇生OK");
+  assert(gm.gs.journal.revives.some((r) => r.charId === "neo"), "蘇生が日誌に載る");
+});
+
 console.log("[M2] 365日通し");
 
 test("供物・食事を続ければ365日到達→EndingJudge", () => {

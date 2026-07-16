@@ -3,7 +3,7 @@
 
 import { DB, getEnemyDef } from "./dataLoader.js";
 import { GameManager } from "./core/gameManager.js";
-import { skillsForCharacter, enhancedSkill } from "./core/stats.js";
+import { skillsForCharacter, enhancedSkill, statAtLevel } from "./core/stats.js";
 import { FieldState, type FieldSymbol } from "./field/field.js";
 import { rulebookText } from "./ui/rulebook.js";
 import type { BattleManager, Command } from "./core/battle/battleManager.js";
@@ -37,6 +37,37 @@ function log(line: string, important = false): void {
   el.scrollTop = el.scrollHeight;
 }
 
+// 状態異常アイコン（第13巻16-0: 色+形で区別）+ 放置死カウントダウン（16-1）
+function statusBadges(c: CharacterState): string {
+  const st = c.status;
+  const parts: string[] = [];
+  if (st.poison !== undefined) parts.push(`<span title="毒" style="color:#b76fd9">☠️あと${st.poison}日</span>`);
+  if (st.burn !== undefined) parts.push(`<span title="大火傷" style="color:#ff9040">🔥あと${st.burn}日</span>`);
+  if (st.bleed !== undefined) parts.push(`<span title="大出血" style="color:#ff5a5a">🩸あと${st.bleed}日</span>`);
+  if ((st.paralysis ?? 0) > 0) parts.push(`<span title="しびれ" style="color:#ffd94a">⚡</span>`);
+  if (st.plagueDay !== undefined) {
+    const sev = st.plagueSevereDays !== undefined
+      ? `重症あと${DB.config.status_timers.plague_severe_death_days - st.plagueSevereDays}日` : "";
+    parts.push(`<span title="疫病" style="color:#6fd98f">🌀${sev}</span>`);
+  }
+  if (st.infectDay !== undefined) {
+    const sev = st.infectSevereDays !== undefined
+      ? `重症あと${DB.config.status_timers.infect_severe_death_days - st.infectSevereDays}日` : "";
+    parts.push(`<span title="感染症" style="color:#5ad9c0">🦠${sev}</span>`);
+  }
+  if (st.obesity) parts.push(`<span title="肥満">🍔</span>`);
+  if (c.exclusion === "coma") parts.push(`<span title="昏睡" style="color:#7aa8ff">💤${c.comaDaysLeft}日</span>`);
+  if (c.exclusion === "betrayal") parts.push(`<span title="裏切り" style="color:#666">😈${c.betrayalDaysLeft}日</span>`);
+  return parts.join(" ");
+}
+
+// 信頼度の段階名（第9巻未受領のため【AI提案・要差替】）とハート表示（16-3）
+function trustHearts(v: number): string {
+  const full = Math.round(v / 20);
+  const label = v >= 80 ? "無二の絆" : v >= 60 ? "親友" : v >= 40 ? "友達" : v >= 20 ? "仲間" : "顔見知り";
+  return `${"♥".repeat(Math.min(5, full))}${"♡".repeat(Math.max(0, 5 - full))} ${Math.round(v)} ${label}`;
+}
+
 // ============ HUD ============
 function renderHUD(): void {
   const el = $("#hud");
@@ -57,18 +88,38 @@ function renderHUD(): void {
     <div class="hud-item"><span class="hud-label">銀貨</span><span class="hud-value">${gm.gs.silver}</span></div>
     <div class="hud-item"><span class="hud-label">炎の供物</span><span class="hud-value ${fireLeft <= 3 ? "warn" : ""}">あと${fireLeft}日</span></div>
     <div class="hud-item"><span class="hud-label">水の供物</span><span class="hud-value ${waterLeft <= 3 ? "warn" : ""}">あと${waterLeft}日</span></div>
-    <div class="hud-item"><button class="small" id="btn-rulebook">📖 ルールブック</button></div>
+    <div class="hud-item"><button class="small" id="btn-rulebook">📖 ルール</button></div>
     <div class="hud-item"><button class="small" id="btn-status">👥 なかま</button></div>
-    <div class="hud-item"><button class="small" id="btn-items">🎒 もちもの</button></div>
-    <div class="hud-item"><button class="small" id="btn-save">💾 セーブ</button></div>
+    <div class="hud-item"><button class="small" id="btn-items">🎒 アイテム</button></div>
+    <div class="hud-item"><button class="small" id="btn-journal">📓 日誌</button></div>
+    <div class="hud-item"><button class="small" id="btn-save">💾 セーブ/ロード</button></div>
+    <div class="hud-party">${partyMiniBars()}</div>
   `;
-  $("#btn-rulebook").onclick = () => showModal("ルールブック", rulebookText());
-  $("#btn-status").onclick = showPartyStatus;
-  $("#btn-items").onclick = showInventory;
-  $("#btn-save").onclick = () => {
-    gm.save.saveManual(1, gm.gs);
-    log("セーブした。（手動スロット1）", true);
-  };
+  $("#btn-rulebook").onclick = () => showModal("ルールブック", rulebookText({
+    fireLeft: gm.tribute.remainingDays("fire"),
+    waterLeft: gm.tribute.remainingDays("water"),
+    reviveIn: gm.gs.reviveLastDay === 0 ? 0
+      : DB.config.revive.cooldown_days - (gm.gs.day - gm.gs.reviveLastDay),
+  }));
+  $("#btn-status").onclick = () => showPartyStatus();
+  $("#btn-items").onclick = () => showInventory();
+  $("#btn-journal").onclick = () => showJournal();
+  $("#btn-save").onclick = () => showSaveLoad(gm.phase === "base" || gm.phase === "map");
+}
+
+// パーティHP簡易バー×人数＋状態異常アイコン（第13巻16-1）
+function partyMiniBars(): string {
+  return Object.values(gm.gs.party).map((c) => {
+    const d = DB.characters[c.id];
+    if (c.exclusion === "dead" || c.exclusion === "kidnapped") {
+      const label = c.exclusion === "dead" ? "死亡" : "誘拐中";
+      return `<span class="mini-bar excluded">${d.name}【${label}】</span>`;
+    }
+    const pct = Math.round((c.hp / c.maxHp) * 100);
+    return `<span class="mini-bar">${c.id === gm.gs.holder ? "🌱" : ""}${d.name}
+      <span class="bar" style="width:40px;display:inline-block"><span class="bar-fill hp ${pct < 30 ? "low" : ""}" style="width:${pct}%;display:block;height:100%"></span></span>
+      ${statusBadges(c)}</span>`;
+  }).join("");
 }
 
 // ============ Modal ============
@@ -84,33 +135,158 @@ function showModal(title: string, body: string, onClose?: () => void): void {
   };
 }
 
-function showPartyStatus(): void {
-  const rows = Object.values(gm.gs.party).map((c) => {
-    const d = DB.characters[c.id];
-    const stNames: Record<string, string> = {
-      poison: "毒", burn: "大火傷", bleed: "大出血", paralysis: "しびれ",
-      plagueDay: "疫病", infectDay: "感染症", obesity: "肥満",
+// なかま画面（第13巻16-3: 詳細ステータス・信頼度ハート・技一覧・除外可視化）
+function showPartyStatus(selectedId?: string): void {
+  const ids = Object.keys(gm.gs.party);
+  const sel = selectedId ?? ids[0];
+  const c = gm.gs.party[sel];
+  const d = DB.characters[sel];
+
+  const nameList = ids.map((id) => {
+    const p2 = gm.gs.party[id];
+    const excl = p2.exclusion !== "none"
+      ? { dead: "【死亡】", kidnapped: "【誘拐中】", betrayal: "【裏切り】", coma: "【昏睡】" }[p2.exclusion]
+      : "";
+    const gray = p2.exclusion !== "none" ? "opacity:.45" : "";
+    return `<button class="small pt-sel ${id === sel ? "selected" : ""}" data-id="${id}" style="${gray}">
+      ${id === gm.gs.holder ? "🌱" : ""}${DB.characters[id].name} Lv${p2.level}${excl}</button>`;
+  }).join(" ");
+
+  const S = (k: any) => Math.round(statAtLevelUI(sel, k, c.level));
+  const w = c.equippedWeapon ? DB.items[c.equippedWeapon] : null;
+  const trustRows = ids.filter((o) => o !== sel).map((o) =>
+    `<tr><td>${DB.characters[o].name}</td><td>${trustHearts(gm.trust.pair(sel, o))}</td></tr>`).join("");
+  const skills = skillsForCharacter(sel)
+    .map(([, sk]) => {
+      const learned = sk.learn_lv <= c.level;
+      return `<tr style="${learned ? "" : "opacity:.4"}"><td>${learned ? sk.name : "？？？"}</td>
+        <td>Lv${sk.learn_lv}</td><td>SP${sk.sp_cost}</td><td>${learned ? sk.desc : ""}</td></tr>`;
+    }).join("");
+
+  showModal(`なかま — ${d.name}`, `
+    <div class="row">${nameList}</div>
+    <p>HP ${c.hp}/${c.maxHp}　SP ${c.sp}/${c.maxSp}　満腹 ${Math.round(c.satiety)}%</p>
+    <p>攻${S("atk")} 防${S("def")} 早${S("spd")} 技${S("skl")} 回${S("eva")} 一撃${statAtLevelUI(sel, "crit", c.level)}%${d.base.mag !== null ? ` 魔${S("mag")}` : ""}</p>
+    <p>装備: ${w ? `${w.name}（攻+${w.atk_bonus ?? 0}${w.mag_bonus ? " 魔+" + w.mag_bonus : ""}${w.protect_bonus ? " 庇う+" + w.protect_bonus + "%" : ""}）` : "素手"}</p>
+    <p>状態: ${statusBadges(c) || "健康"}</p>
+    <h3 class="section-title">信頼度</h3>
+    <table class="data">${trustRows}</table>
+    <h3 class="section-title">技</h3>
+    <div style="max-height:200px;overflow-y:auto"><table class="data">${skills}</table></div>
+  `);
+  document.querySelectorAll(".pt-sel").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      document.querySelector(".modal-back")?.remove();
+      showPartyStatus((b as HTMLElement).dataset.id);
     };
-    const active = Object.entries(c.status)
-      .filter(([k, v]) => stNames[k] && v !== undefined && v !== false)
-      .map(([k]) => stNames[k]);
-    const st = c.exclusion !== "none"
-      ? { dead: "死亡", kidnapped: "誘拐", betrayal: "裏切り", coma: "昏睡" }[c.exclusion]
-      : active.length > 0 ? active.join("/") : "正常";
-    const w = c.equippedWeapon ? DB.items[c.equippedWeapon]?.name : "素手";
-    return `<tr><td>${c.id === gm.gs.holder ? "🌱" : ""}${d.name}</td><td>Lv${c.level}</td>
-      <td>${c.hp}/${c.maxHp}</td><td>${c.sp}/${c.maxSp}</td><td>${st}</td><td>${w}</td></tr>`;
-  }).join("");
-  showModal("なかま", `<table class="data"><tr><th>名前</th><th>Lv</th><th>HP</th><th>SP</th><th>状態</th><th>武器</th></tr>${rows}</table>
-    <p style="margin-top:10px;font-size:12px">保持者との平均信頼度: ${gm.trust.avgHolder().toFixed(1)}</p>`);
+  });
 }
 
-function showInventory(): void {
-  const rows = Object.entries(gm.gs.inventory)
-    .filter(([, n]) => n > 0)
-    .map(([id, n]) => `<tr><td>${DB.items[id]?.name ?? id}</td><td>×${n}</td><td>${DB.items[id]?.desc ?? ""}</td></tr>`)
-    .join("");
-  showModal("もちもの", `<table class="data"><tr><th>アイテム</th><th>数</th><th>説明</th></tr>${rows || "<tr><td colspan=3>なにも持っていない</td></tr>"}</table>`);
+function statAtLevelUI(id: string, stat: string, level: number): number {
+  return statAtLevel(id, stat as any, level);
+}
+
+// アイテム画面（第13巻16-6: 原設定の7分類タブ・保存日数・供物可バッジ）
+const ITEM_TABS: [string, string[]][] = [
+  ["食料素材", ["food_material"]],
+  ["食料", ["food"]],
+  ["武器素材", ["weapon_material"]],
+  ["武器", ["weapon"]],
+  ["薬草", ["herb"]],
+  ["薬", ["medicine"]],
+  ["重要", ["key_item", "treasure", "boss_material"]],
+];
+
+function showInventory(tabIndex = 0): void {
+  const [, cats] = ITEM_TABS[tabIndex];
+  const tabs = ITEM_TABS.map(([name], i) =>
+    `<button class="small inv-tab ${i === tabIndex ? "selected" : ""}" data-i="${i}">${name}</button>`).join(" ");
+
+  let rows: string;
+  if (cats.includes("food")) {
+    // 料理はfoodStockから（保存残り日数・期限当日は赤）
+    rows = gm.gs.foodStock.map((f) => {
+      const item = DB.items[f.dishId];
+      const left = DB.config.craft.food_expire_days - (gm.gs.day - f.madeDay);
+      const q = { great: "◎", normal: "○", poor: "△" }[f.quality];
+      const style = left <= 1 ? 'style="color:var(--danger)"' : "";
+      return `<tr><td>${q} ${f.quality === "great" ? item.great_name : item.name}</td>
+        <td ${style}>あと${left}日</td><td>${item.desc}</td></tr>`;
+    }).join("");
+  } else {
+    rows = Object.entries(gm.gs.inventory)
+      .filter(([id, n]) => n > 0 && cats.includes(DB.items[id]?.category ?? ""))
+      .map(([id, n]) => {
+        const item = DB.items[id];
+        const badge = item.family === "meat" ? ' <span style="color:var(--accent)">[供物可🔥]</span>'
+          : item.family === "fish" ? ' <span style="color:var(--accent)">[供物可💧]</span>' : "";
+        return `<tr><td>${item.name}${badge}</td><td>×${n}</td><td>${item.desc}</td></tr>`;
+      }).join("");
+  }
+  showModal("アイテム", `<div class="row">${tabs}</div>
+    <table class="data"><tr><th>アイテム</th><th>数/期限</th><th>説明</th></tr>${rows || "<tr><td colspan=3>なし</td></tr>"}</table>`);
+  document.querySelectorAll(".inv-tab").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      document.querySelector(".modal-back")?.remove();
+      showInventory(Number((b as HTMLElement).dataset.i));
+    };
+  });
+}
+
+// 日誌（第13巻16-2: 供物・蘇生の履歴／視聴済みイベント／本日のログ）
+function showJournal(): void {
+  const j = gm.gs.journal;
+  const tributes = j.tributes.slice(-10).map((t) =>
+    `<li>Day${t.day}: ${t.goddess === "fire" ? "炎の女神🔥" : "水の女神💧"}に供物を捧げた</li>`).join("");
+  const revives = j.revives.map((r) =>
+    `<li>Day${r.day}: ${DB.characters[r.charId].name}が湖の祠で生き返った</li>`).join("");
+  const events = j.events.slice(-10).map((e) =>
+    `<li>Day${e.day}: ${e.id}</li>`).join("");
+  const todayLog = logBuffer.slice(-8).map((l) => `<li>${l}</li>`).join("");
+  showModal("📓 日誌", `
+    <h3 class="section-title">供物の記録</h3><ul>${tributes || "<li>まだない</li>"}</ul>
+    <h3 class="section-title">蘇生の記録</h3><ul>${revives || "<li>まだない</li>"}</ul>
+    <h3 class="section-title">出来事</h3><ul>${events || "<li>まだない</li>"}</ul>
+    <h3 class="section-title">本日のログ</h3><ul style="font-size:12px">${todayLog}</ul>`);
+}
+
+// セーブ/ロード画面（第13巻17-2/17-3: オート3+手動10=13スロット・メタ表示）
+function showSaveLoad(canSave: boolean): void {
+  const slotRow = (id: string) => {
+    const meta = gm.save.readMeta(id);
+    const label = id.startsWith("auto") ? `オート${Number(id.split("_")[1]) + 1}` : `手動${id.split("_")[1]}`;
+    const info = meta
+      ? `Day${meta.day}・🌱${DB.characters[meta.holder]?.name ?? meta.holder}・生存${meta.aliveCount}人・${trustHearts(meta.trustAvg).split(" ")[0]}`
+      : "（空き）";
+    const saveBtn = canSave && id.startsWith("manual")
+      ? `<button class="small sv-btn" data-id="${id}">保存</button>` : "";
+    const loadBtn = meta ? `<button class="small ld-btn" data-id="${id}">ロード</button>` : "";
+    return `<tr><td>${label}</td><td>${info}</td><td>${saveBtn} ${loadBtn}</td></tr>`;
+  };
+  const rows = gm.save.allSlotIds().map(slotRow).join("");
+  showModal("💾 セーブ / ロード", `<table class="data"><tr><th>スロット</th><th>内容</th><th></th></tr>${rows}</table>`);
+  document.querySelectorAll(".sv-btn").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      const id = (b as HTMLElement).dataset.id!;
+      gm.save.saveManual(Number(id.split("_")[1]), gm.gs);
+      log(`セーブした。（${id.replace("manual_", "手動スロット")}）`, true);
+      document.querySelector(".modal-back")?.remove();
+      showSaveLoad(canSave);
+    };
+  });
+  document.querySelectorAll(".ld-btn").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      const id = (b as HTMLElement).dataset.id!;
+      if (gm.loadGame(id)) {
+        document.querySelector(".modal-back")?.remove();
+        log("記録を読み込んだ。", true);
+        // ロード時: 現在の供物締切を復元表示（第13巻17-3）
+        log(`供物の締切——炎: あと${gm.tribute.remainingDays("fire")}日／水: あと${gm.tribute.remainingDays("water")}日`);
+        field = null;
+        renderPhase();
+      }
+    };
+  });
 }
 
 // ============ Title ============
@@ -123,17 +299,20 @@ function renderTitle(): void {
       <div class="menu-list">
         <button id="btn-new">はじめから</button>
         <button id="btn-load">つづきから</button>
+        <button id="btn-gallery">ギャラリー</button>
       </div>
     </div>`;
   $("#btn-new").onclick = renderPrologue;
   $("#btn-load").onclick = () => {
-    if (gm.loadGame("manual_1") || gm.loadGame("auto_0")) {
-      log("記録を読み込んだ。", true);
-      renderPhase();
+    if (gm.save.allSlotIds().some((id) => gm.save.readMeta(id))) {
+      showSaveLoad(false);
     } else {
       showModal("つづきから", "セーブデータが見つからない。");
     }
   };
+  // ギャラリー（第13巻16-9: クリア後開放。実装枠のみ【AI提案】）
+  $("#btn-gallery").onclick = () => showModal("ギャラリー",
+    "クリア後に、迎えたエンディングや思い出のイベントをここで振り返ることができる。\n（まだ何も記録されていない）");
 }
 
 function renderPrologue(): void {
@@ -174,13 +353,18 @@ function renderHolderSelect(): void {
     (el as HTMLElement).onclick = () => {
       const id = (el as HTMLElement).dataset.id!;
       const d = DB.characters[id];
+      // 二重確認（第13巻16-9: 保持者選択は取り返しがつかないため2段階）
       showModal("確認", `${d.name}にホープシードを託す。\nこの選択はエンディングまで変更できない。よいか？\n\n<button id="confirm-holder">託す</button>`);
       (document.querySelector("#confirm-holder") as HTMLElement).onclick = () => {
         document.querySelector(".modal-back")?.remove();
-        gm.newGame(id, Date.now() >>> 0);
-        log(`${d.name}がホープシードの保持者となった。`, true);
-        checkEvents();
-        renderPhase();
+        showModal("最終確認", `本当に${d.name}でよいか？\n保持者が失われたとき、すべてが終わる。\n\n<button id="confirm-holder2">はい——${d.name}に託す</button>`);
+        (document.querySelector("#confirm-holder2") as HTMLElement).onclick = () => {
+          document.querySelector(".modal-back")?.remove();
+          gm.newGame(id, Date.now() >>> 0);
+          log(`${d.name}がホープシードの保持者となった。`, true);
+          checkEvents();
+          renderPhase();
+        };
       };
     };
   });
@@ -210,6 +394,17 @@ function renderBase(): void {
   const reviveReady = deadMembers.length > 0
     && (gm.gs.reviveLastDay === 0 || gm.gs.day - gm.gs.reviveLastDay >= DB.config.revive.cooldown_days);
   const bleeding = Object.values(gm.gs.party).filter((c) => c.status.bleed !== undefined && c.exclusion === "none");
+  // 看病対象: 昏睡または感染症（第7巻9-4）
+  const needCare = Object.values(gm.gs.party).filter((c) =>
+    c.exclusion !== "kidnapped" && c.exclusion !== "dead"
+    && (c.comaDaysLeft > 0 || c.status.infectDay !== undefined));
+  // 祠の蘇生カウントダウン（第13巻16-5: 「あとN日で祈り可能」）
+  const reviveIn = gm.gs.reviveLastDay === 0 ? 0
+    : Math.max(0, DB.config.revive.cooldown_days - (gm.gs.day - gm.gs.reviveLastDay));
+  const reviveLabel = deadMembers.length === 0 ? "⛩️ 湖の祠（蘇生）"
+    : reviveIn <= 0 ? "⛩️ 湖の祠（祈り可能）" : `⛩️ 湖の祠（あと${reviveIn}日で祈り可能）`;
+  // 会話イベントの！通知（第13巻16-5）
+  const evCount = gm.events.evaluateTriggers().length;
 
   screen().innerHTML = `
     <div class="screen-inner">
@@ -220,10 +415,11 @@ function renderBase(): void {
         <button id="b-craft-pharmacy">🌿 薬草開発</button>
         <button id="b-eat" ${foods.length === 0 && raws.length === 0 ? "disabled" : ""}>🍖 食事</button>
         <button id="b-treat" ${bleeding.length === 0 ? "disabled" : ""}>🩹 治療（大出血の処置）</button>
+        <button id="b-nurse" ${needCare.length === 0 ? "disabled" : ""}>🛌 看病</button>
         <button id="b-medicine">💊 薬を使う</button>
         <button id="b-equip">⚔️ 装備</button>
-        <button id="b-revive" ${reviveReady ? "" : "disabled"}>⛩️ 湖の祠（蘇生）</button>
-        <button id="b-talk">💬 会話</button>
+        <button id="b-revive" ${reviveReady ? "" : "disabled"}>${reviveLabel}</button>
+        <button id="b-talk">💬 会話${evCount > 0 ? `<span style="color:var(--accent)">！${evCount}</span>` : ""}</button>
         <button id="b-rest">😴 休息（就寝して翌日へ）</button>
         <button id="b-out">🗺️ 島へ出る</button>
       </div>
@@ -297,6 +493,28 @@ function renderBase(): void {
             log(r.message, r.ok);
             gm.advanceTime(1);
             renderPhase();
+          };
+        });
+      };
+    });
+  };
+  $("#b-nurse").onclick = () => {
+    const detail = $("#base-detail");
+    const nurses = gm.party.getActiveMembers().filter((c) => gm.craft.canWork(c.id));
+    detail.innerHTML = `<h3 class="section-title">看病（昏睡・感染症の重症化をその日1回防ぐ）— 誰が付き添う？</h3><div class="row">` +
+      nurses.map((c) => `<button class="small nurse-btn" data-id="${c.id}">${DB.characters[c.id].name}</button>`).join(" ") + "</div><div id=\"care-list\"></div>";
+    detail.querySelectorAll(".nurse-btn").forEach((b) => {
+      (b as HTMLElement).onclick = () => {
+        const nurseId = (b as HTMLElement).dataset.id!;
+        const list = $("#care-list");
+        list.innerHTML = `<div class="row" style="margin-top:8px"><b>誰に付き添う？</b> ` +
+          needCare.filter((c) => c.id !== nurseId)
+            .map((c) => `<button class="small care-btn" data-id="${c.id}">${DB.characters[c.id].name} ${statusBadges(c)}</button>`).join(" ") + "</div>";
+        list.querySelectorAll(".care-btn").forEach((cb) => {
+          (cb as HTMLElement).onclick = () => {
+            const r = gm.nurse(nurseId, (cb as HTMLElement).dataset.id!);
+            log(r.message, r.ok);
+            if (r.ok) { checkEvents(); renderPhase(); }
           };
         });
       };
@@ -379,6 +597,14 @@ function renderBase(): void {
     playEvent(evs[0].id);
   };
   $("#b-rest").onclick = () => {
+    // 就寝確認（第13巻16-5: 誤操作で1日を失わないための二段確認）
+    const detail = $("#base-detail");
+    detail.innerHTML = `<h3 class="section-title">今日を終えますか？（オートセーブされます）</h3>
+      <div class="row"><button id="rest-yes">はい、眠る</button><button id="rest-no">まだ起きている</button></div>`;
+    $("#rest-no").onclick = () => { detail.innerHTML = ""; };
+    $("#rest-yes").onclick = () => doRest();
+  };
+  const doRest = () => {
     const ev = gm.rollNightEvents();
     if (ev.raid) {
       log("闇の気配——悪魔の夜襲だ！", true);
@@ -430,15 +656,26 @@ function renderCraft(type: "cook" | "build" | "pharmacy"): void {
   detail.querySelectorAll(".crafter-btn").forEach((b) => {
     (b as HTMLElement).onclick = () => {
       const crafterId = (b as HTMLElement).dataset.id!;
-      const recipes = gm.craft.availableRecipes(type, crafterId);
+      const skill = DB.characters[crafterId].craft[type];
       const list = $("#recipe-list");
-      list.innerHTML = `<div class="row" style="margin-top:10px">` + (recipes.length === 0
-        ? "<p>作れるものがない。</p>"
-        : recipes.map((r) => {
-          const can = gm.craft.canCraft(r);
-          const inputs = r.inputs.map((i: any) => `${DB.items[i.item].name}×${i.qty}`).join(" ");
-          return `<button class="small recipe-btn" data-id="${r.id}" ${can ? "" : "disabled"}>${DB.items[r.result].name}（${inputs}）</button>`;
-        }).join("")) + "</div>";
+      // 全レシピを列挙: 🔒=適性不足／？？？=未ひらめき／成功率プレビュー（第13巻16-7）
+      const rows = (DB.recipes[type] ?? []).map((r: any) => {
+        const locked = r.skill_req > skill;
+        const known = gm.craft.isRecipeKnown(r);
+        if (!known) {
+          return `<tr><td>？？？</td><td>—</td><td>—</td><td><i>素材が揃うとひらめく</i></td></tr>`;
+        }
+        const inputs = r.inputs.map((i: any) => `${DB.items[i.item].name}×${i.qty}`).join(" ");
+        if (locked) {
+          return `<tr style="opacity:.5"><td>🔒 ${DB.items[r.result].name}</td><td>必要適性${r.skill_req}</td><td>${inputs}</td><td>—</td></tr>`;
+        }
+        const can = gm.craft.canCraft(r);
+        const rates = gm.craft.ratesFor(type, crafterId, r);
+        return `<tr><td><button class="small recipe-btn" data-id="${r.id}" ${can ? "" : "disabled"}>${DB.items[r.result].name}</button></td>
+          <td>大成功${rates.great}%／成功${rates.success}%／失敗${rates.fail}%</td>
+          <td>${inputs}</td><td>${can ? "" : "素材不足"}</td></tr>`;
+      }).join("");
+      list.innerHTML = `<table class="data" style="margin-top:10px"><tr><th>レシピ</th><th>成功率（${DB.characters[crafterId].name}）</th><th>素材</th><th></th></tr>${rows}</table>`;
       list.querySelectorAll(".recipe-btn").forEach((rb) => {
         (rb as HTMLElement).onclick = () => {
           const res = gm.craft.craft(type, (rb as HTMLElement).dataset.id!, crafterId);
@@ -784,8 +1021,9 @@ function renderBattle(): void {
     const d = DB.characters[a.state.id];
     const hpPct = Math.round((a.state.hp / a.state.maxHp) * 100);
     const spPct = Math.round((a.state.sp / a.state.maxSp) * 100);
+    const betrayed = (a as any).betrayed ? " 😈裏切り" : "";
     return `<div class="unit-card ${a.state.downed ? "downed" : ""} ${a.state.id === gm.gs.holder ? "holder" : ""}">
-      <div class="name">${d.name} Lv${a.state.level}</div>
+      <div class="name">${d.name} Lv${a.state.level}${betrayed} ${statusBadges(a.state)}</div>
       <div class="bar"><div class="bar-fill hp ${hpPct < 30 ? "low" : ""}" style="width:${hpPct}%"></div></div>
       <div style="font-size:11px">HP ${a.state.hp}/${a.state.maxHp}</div>
       <div class="bar"><div class="bar-fill sp" style="width:${spPct}%"></div></div>
@@ -793,30 +1031,47 @@ function renderBattle(): void {
     </div>`;
   }).join("");
 
+  // 敵HPバーは表示しない（第13巻16-4: ダメージログと外見で推測）。Lv表示・予告は「！」
   const enemyCards = b.enemies.map((e, i) => {
-    const hpPct = Math.round((e.hp / e.maxHp) * 100);
+    const mark = e.telegraphed ? ' <span style="color:var(--danger);font-size:18px">！</span>' : "";
+    const tamed = e.tamedTurns ? ` 🐾あと${e.tamedTurns}T` : "";
     return `<div class="unit-card enemy ${e.alive ? "" : "downed"}" data-ei="${i}">
-      <div class="name">${e.def.name}</div>
-      <div class="bar"><div class="bar-fill hp ${hpPct < 30 ? "low" : ""}" style="width:${hpPct}%"></div></div>
+      <div class="name">${e.def.name} Lv${e.level}${mark}${tamed}</div>
     </div>`;
   }).join("");
+
+  // ターン順表示（第13巻16-4: 素早さ降順プレビュー）
+  const order = [
+    ...b.allies.filter((a) => !a.state.downed).map((a) => ({
+      name: DB.characters[a.state.id].name,
+      spd: statAtLevelUI(a.state.id, "spd", a.state.level),
+    })),
+    ...b.enemies.filter((e) => e.alive).map((e) => ({ name: e.def.name, spd: e.spd })),
+  ].sort((x, y) => y.spd - x.spd).map((x) => x.name).join("→");
 
   let commandHtml = "";
   if (actor) {
     const d = DB.characters[actor.state.id];
     const cmds = b.availableCommands(actor.state.id);
-    commandHtml = `<b>${d.name}のコマンド:</b> ` + cmds.map((c) => {
-      const names: Record<string, string> = {
-        attack: "⚔️ 攻撃", skill: "✨ 技", guard: "🛡️ 防御",
-        protect: "🤝 庇う", item: "🎒 アイテム", flee: "🏃 逃げる",
-        tame: "🐾 手なずける", persuade: "💬 説得",
-      };
-      return `<button class="small cmd-btn" data-cmd="${c}">${names[c]}</button>`;
+    const isHolder = actor.state.id === gm.gs.holder;
+    const names: Record<string, string> = {
+      attack: "⚔️ たたかう", skill: "✨ わざ", guard: "🛡️ ぼうぎょ",
+      protect: "🤝 かばう", item: "🎒 アイテム", flee: "🏃 にげる",
+      tame: "🐾 手なずける", persuade: "💬 説得",
+    };
+    // 保持者は「たたかう/わざ」をグレーアウト表示（第13巻16-4・原設定）
+    const display: string[] = isHolder
+      ? ["attack", "skill", ...cmds.filter((c) => c !== "attack" && c !== "skill")]
+      : [...cmds];
+    commandHtml = `<b>${d.name}のコマンド:</b> ` + display.map((c) => {
+      const enabled = cmds.includes(c as any);
+      return `<button class="small cmd-btn" data-cmd="${c}" ${enabled ? "" : "disabled"}>${names[c]}</button>`;
     }).join(" ");
   }
 
   screen().innerHTML = `
     <div class="battle-wrap">
+      <div class="turn-order">ターン順: ${order}</div>
       <div class="battle-field">
         <div class="battle-side">${allyCards}</div>
         <div style="font-size:40px">⚔️</div>
@@ -931,9 +1186,10 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
       return;
     }
     case "protect": {
-      const others = b.allies.filter((a) => !a.state.downed && a.state.id !== actor.id);
+      const others = b.allies.filter((a) => !a.state.downed && !(a as any).betrayed && a.state.id !== actor.id);
+      // 対象ごとの成功率%をリアルタイム表示（第13巻16-4: 信頼度が数字で効く実感）
       const btns = others.map((a) =>
-        `<button class="small p-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
+        `<button class="small p-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}（${b.protectRatePreview(actor.id, a.state.id)}%）</button>`).join(" ");
       cmdBar.innerHTML = `<b>誰を庇う？</b> ${btns} <button class="small" id="p-back">戻る</button>`;
       ($("#p-back")).onclick = () => renderBattle();
       cmdBar.querySelectorAll(".p-btn").forEach((t) => {

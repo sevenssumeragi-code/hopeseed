@@ -93,6 +93,7 @@ export interface StatusState {
   infectSevereDays?: number;
   obesityPlainDays?: number;  // 肥満: 粗食日数(7で解消)
   obesity?: boolean;
+  nursedToday?: boolean;      // 看病中: 感染症の重症化判定を1回スキップ(第7巻9-4)
 }
 
 export interface CharacterState {
@@ -293,6 +294,11 @@ export interface GameState {
   protectCounts: Record<string, number>;   // 庇う成功回数 "from>to"（第4巻5-4-4）
   halfTimeAccrued: boolean;                // 0.5時間帯コストの繰越（第3巻4-0-2）
   lastDriftDay: number;                    // 漂着物の最終取得日（第3巻4-8: 毎日1回）
+  journal: {                               // 日誌（第13巻16-2）
+    tributes: { day: number; goddess: string }[];
+    revives: { day: number; charId: string }[];
+    events: { day: number; id: string }[];
+  };
   gameOver: GOReason | null;
   rngSeed: number;
   version: number;

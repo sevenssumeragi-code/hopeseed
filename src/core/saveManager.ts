@@ -25,7 +25,12 @@ export function checksum(s: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-interface SaveEnvelope { checksum: string; payload: string; savedAt: string; }
+export interface SaveMeta {
+  day: number; holder: string; slot: string; savedAt: string;
+  aliveCount: number; trustAvg: number;
+}
+interface SaveEnvelope { checksum: string; payload: string; savedAt: string; meta?: SaveMeta; }
+const MANUAL_SLOTS = 10;
 
 export class SaveManager {
   private autoIndex = 0;
@@ -56,22 +61,51 @@ export class SaveManager {
 
   private write(slotId: string, gs: GameState): void {
     const payload = JSON.stringify(gs);
+    const alive = Object.values(gs.party).filter((c) => c.exclusion === "none").length;
+    const holderTrust = Object.keys(gs.party)
+      .filter((id) => id !== gs.holder)
+      .map((id) => gs.trust[[gs.holder, id].sort().join(":")])
+      .filter((v): v is number => v !== undefined);
     const env: SaveEnvelope = {
       checksum: checksum(payload),
       payload,
       savedAt: new Date().toISOString(),
+      meta: {
+        day: gs.day, holder: gs.holder, slot: gs.slot,
+        savedAt: new Date().toISOString(),
+        aliveCount: alive,
+        trustAvg: holderTrust.length > 0
+          ? holderTrust.reduce((s2, v) => s2 + v, 0) / holderTrust.length : 0,
+      },
     };
     storeSet(`hopeseed_${slotId}`, JSON.stringify(env));
   }
 
+  readMeta(slotId: string): SaveMeta | null {
+    const raw = storeGet(`hopeseed_${slotId}`);
+    if (!raw) return null;
+    try {
+      const env = JSON.parse(raw) as SaveEnvelope;
+      return env.meta ?? null;
+    } catch { return null; }
+  }
+
+  // オート3世代＋手動10（第13巻17-3: 計13スロット一覧）
   listSlots(): string[] {
     const slots: string[] = [];
     for (let i = 0; i < SaveManager.AUTO_SLOTS; i++) {
       if (storeGet(`hopeseed_auto_${i}`)) slots.push(`auto_${i}`);
     }
-    for (let i = 1; i <= 3; i++) {
+    for (let i = 1; i <= MANUAL_SLOTS; i++) {
       if (storeGet(`hopeseed_manual_${i}`)) slots.push(`manual_${i}`);
     }
     return slots;
+  }
+
+  allSlotIds(): string[] {
+    const ids: string[] = [];
+    for (let i = 0; i < SaveManager.AUTO_SLOTS; i++) ids.push(`auto_${i}`);
+    for (let i = 1; i <= MANUAL_SLOTS; i++) ids.push(`manual_${i}`);
+    return ids;
   }
 }
