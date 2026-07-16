@@ -272,7 +272,8 @@
     "grassland": 1,
     "beach": 1,
     "wasteland": 2,
-    "volcano": 2,
+    "trail": 2,
+    "volcano_summit": 2,
     "shallows": 3,
     "shrine_islet": 3,
     "pirate_ship": 3,
@@ -303,5 +304,46 @@
       "dmg_mult": 2.0,
       "requires_status": true
     }
+  },
+  "field": {
+    "high_tide_timer_sec": 90,
+    "rockfall_chance_per_sec": 0.02,
+    "rockfall_dodge_base": 40,
+    "rockfall_dodge_skl_factor": 0.5,
+    "rockfall_damage_ratio": 0.1,
+    "lava_damage_ratio": 0.08,
+    "lava_burn_chance": 0.5,
+    "fire_grace_chance": 0.1,
+    "fog_wander_chance": 0.15,
+    "drift_table": [
+      {
+        "item": "wood",
+        "weight": 40
+      },
+      {
+        "item": "fish",
+        "weight": 15
+      },
+      {
+        "item": "shellfish",
+        "weight": 15
+      },
+      {
+        "item": "sailcloth",
+        "weight": 10
+      },
+      {
+        "item": "treasure",
+        "weight": 5
+      },
+      {
+        "item": "rum",
+        "weight": 7
+      },
+      {
+        "item": "grain",
+        "weight": 8
+      }
+    ]
   }
 }

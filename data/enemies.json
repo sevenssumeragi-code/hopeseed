@@ -45,7 +45,7 @@
     ],
     "spawn": {
       "areas": [
-        "volcano"
+        "trail"
       ],
       "time": "any"
     }
@@ -94,7 +94,7 @@
     ],
     "spawn": {
       "areas": [
-        "volcano"
+        "trail"
       ],
       "time": "any"
     }
@@ -144,7 +144,7 @@
     ],
     "spawn": {
       "areas": [
-        "volcano"
+        "trail"
       ],
       "time": "any"
     }

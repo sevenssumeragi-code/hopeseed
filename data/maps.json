@@ -1,10 +1,11 @@
 {
-  "_source": "エリア構成=第0巻0-2/0-4。敵配置=第8巻spawn(正本)。密度=第14巻18-2。採取品=第7巻8-1/8-3/8-5。地形詳細は第3巻未受領のため形状は【AI提案】。",
+  "_source": "第3巻(正本): 4-0-1島構成/4-0-2移動コスト/4-1〜4-12エリア定義。敵配置=第8巻spawn。密度=第14巻18-2。costs=時間帯コスト(0.5は2回で1時間帯)。",
 
   "base": {
     "name": "湖畔の拠点", "area_type": "base", "size": [20, 20],
     "density_day": 0, "density_night": 0, "enemies": [], "gather": [],
-    "connections": ["forest_lake", "grassland"],
+    "connections": ["forest_lake"],
+    "costs": { "forest_lake": 0 },
     "is_base": true
   },
   "forest_lake": {
@@ -13,46 +14,72 @@
     "enemies": ["wolf", "boar", "bear", "flytrap", "pitcher_plant", "rafflesia", "centipede", "giant_mosquito"],
     "night_enemies": [],
     "gather": [
-      {"item":"nuts","rate":0.5},{"item":"mushroom","rate":0.4},{"item":"wood","rate":0.5},
-      {"item":"herb_blue","rate":0.3},{"item":"herb_green","rate":0.3},
-      {"item":"fish","rate":0.3},{"item":"honey","rate":0.15,"risk_battle":0.3}
+      {"item":"herb_green","rate":0.5},{"item":"herb_blue","rate":0.3},
+      {"item":"nuts","rate":0.5},{"item":"mushroom","rate":0.4},
+      {"item":"wood","rate":0.5},{"item":"honey","rate":0.15,"risk_battle":0.3}
     ],
-    "connections": ["base", "grassland", "shallows"]
-  },
-  "grassland": {
-    "name": "草原", "area_type": "field", "size": [28, 28],
-    "density_day": 4, "density_night": 5,
-    "enemies": ["wolf", "boar", "bull", "flytrap", "pitcher_plant"],
-    "night_enemies": ["tiger", "demon"],
-    "gather": [
-      {"item":"wild_grass","rate":0.5},{"item":"grain","rate":0.4},{"item":"grass_fiber","rate":0.5},
-      {"item":"herb_green","rate":0.3},{"item":"herb_yellow","rate":0.3}
-    ],
-    "connections": ["base", "forest_lake", "wasteland", "beach"]
+    "fishing": true,
+    "connections": ["base", "wasteland", "grassland"],
+    "costs": { "base": 0, "wasteland": 1, "grassland": 1 },
+    "fog_wander": true
   },
   "wasteland": {
-    "name": "荒野", "area_type": "field", "size": [26, 26],
+    "name": "荒野（溶岩台地）", "area_type": "field", "size": [26, 26],
     "density_day": 5, "density_night": 6,
     "enemies": ["wolf", "bull", "scorpion", "centipede"],
     "night_enemies": ["demon"],
     "gather": [
-      {"item":"beast_bone","rate":0.4},{"item":"herb_yellow","rate":0.35}
+      {"item":"herb_yellow","rate":0.45},{"item":"wood","rate":0.3},
+      {"item":"beast_bone","rate":0.4}
     ],
-    "connections": ["grassland", "volcano"]
+    "connections": ["forest_lake", "trail"],
+    "costs": { "forest_lake": 1, "trail": 1 }
   },
-  "volcano": {
-    "name": "火山・登山道", "area_type": "field", "size": [22, 30],
+  "trail": {
+    "name": "登山道", "area_type": "field", "size": [22, 30],
     "density_day": 5, "density_night": 6,
     "enemies": ["fireball", "lava_worm", "flame_beast"],
     "night_enemies": [],
     "night_fireball_bonus": 0.3,
+    "ash_density_bonus": 0.2,
     "gather": [
-      {"item":"volcanic_stone","rate":0.5},{"item":"iron_ore","rate":0.2,"respawn":"rare"},
-      {"item":"sulfur","rate":0.35},{"item":"herb_red","rate":0.35}
+      {"item":"herb_red","rate":0.5},{"item":"volcanic_stone","rate":0.4},
+      {"item":"iron_ore","rate":0.2,"respawn":"rare"}
     ],
-    "connections": ["wasteland"],
-    "has_shrine": "fire",
+    "connections": ["wasteland", "volcano_summit"],
+    "costs": { "wasteland": 1, "volcano_summit": 1 },
+    "boss": "volcano_lord",
+    "rockfall": true,
+    "fire_grace": true,
     "paralysis_death_zone": true
+  },
+  "volcano_summit": {
+    "name": "火山（山頂）", "area_type": "field", "size": [18, 18],
+    "density_day": 0, "density_night": 0,
+    "enemies": [],
+    "gather": [
+      {"item":"volcanic_stone","rate":0.4},{"item":"sulfur","rate":0.4},
+      {"item":"wood","rate":0.25}
+    ],
+    "connections": ["trail"],
+    "costs": { "trail": 0.5 },
+    "has_shrine": "fire",
+    "lava_hazard": true,
+    "paralysis_death_zone": true,
+    "sanctuary": true
+  },
+  "grassland": {
+    "name": "草原", "area_type": "field", "size": [28, 28],
+    "density_day": 4, "density_night": 5,
+    "enemies": ["wolf", "bull", "flytrap", "pitcher_plant"],
+    "night_enemies": ["tiger", "demon"],
+    "gather": [
+      {"item":"herb_green","rate":0.3},{"item":"herb_yellow","rate":0.3},
+      {"item":"wild_grass","rate":0.5},{"item":"grain","rate":0.4},
+      {"item":"grass_fiber","rate":0.5}
+    ],
+    "connections": ["forest_lake", "beach"],
+    "costs": { "forest_lake": 1, "beach": 1 }
   },
   "beach": {
     "name": "砂浜", "area_type": "field", "size": [30, 18],
@@ -62,12 +89,13 @@
     "night_no_pirates": true,
     "gather": [
       {"item":"shellfish","rate":0.5},{"item":"crab","rate":0.4},
-      {"item":"driftwood","rate":0.4},{"item":"iron_sand","rate":0.3},
-      {"item":"pearl","rate":0.08,"respawn":"rare"}
+      {"item":"driftwood","rate":0.4},{"item":"iron_sand","rate":0.3}
     ],
     "drift_point": true,
     "connections": ["grassland", "shallows", "pirate_ship"],
-    "requires_for": {"pirate_ship": "boat_repair_kit"}
+    "costs": { "grassland": 1, "shallows": 0.5, "pirate_ship": 0.5 },
+    "requires_for": { "pirate_ship": "boat_repair_kit" },
+    "sea_area": true
   },
   "shallows": {
     "name": "浅瀬の海", "area_type": "field", "size": [26, 20],
@@ -76,19 +104,31 @@
     "night_enemies": [],
     "gather": [
       {"item":"fish","rate":0.5},{"item":"seaweed","rate":0.4,"low_tide_only":true},
-      {"item":"caviar","rate":0.08},{"item":"herb_blue","rate":0.2}
+      {"item":"herb_blue","rate":0.25,"low_tide_only":true},
+      {"item":"pearl","rate":0.08,"respawn":"rare","low_tide_only":true},
+      {"item":"caviar","rate":0.08}
     ],
-    "connections": ["forest_lake", "beach", "shrine_islet"],
+    "fishing": true,
+    "connections": ["beach", "shrine_islet"],
+    "costs": { "beach": 0.5, "shrine_islet": 0.5 },
+    "low_tide_only_to": ["shrine_islet"],
+    "boss": "deep_sea_nushi",
     "tidal": true,
-    "paralysis_death_zone_high_tide": true
+    "high_tide_timer_sec": 90,
+    "paralysis_death_zone_high_tide": true,
+    "sea_area": true
   },
   "shrine_islet": {
-    "name": "海の祠の孤島", "area_type": "field", "size": [16, 16],
-    "density_day": 1, "density_night": 1,
-    "enemies": ["shark"],
-    "gather": [{"item":"holy_water","rate":0.15,"respawn":"rare"},{"item":"caviar","rate":0.15}],
+    "name": "孤島（海の祠）", "area_type": "field", "size": [16, 16],
+    "density_day": 0, "density_night": 0,
+    "enemies": [],
+    "gather": [{"item":"holy_water","rate":0.15,"respawn":"rare"}],
     "connections": ["shallows"],
-    "has_shrine": "water"
+    "costs": { "shallows": 0.5 },
+    "low_tide_only_to": ["shallows"],
+    "has_shrine": "water",
+    "sanctuary": true,
+    "sea_area": true
   },
   "pirate_ship": {
     "name": "海賊船", "area_type": "dungeon", "size": [14, 40],
@@ -97,7 +137,9 @@
     "no_respawn": true,
     "gather": [{"item":"sailcloth","rate":0.3},{"item":"rum","rate":0.25},{"item":"treasure","rate":0.15}],
     "connections": ["beach"],
-    "boss": "pirate_captain"
+    "costs": { "beach": 0.5 },
+    "boss": "pirate_captain",
+    "sea_area": true
   },
   "dream": {
     "name": "夢の中", "area_type": "dream", "size": [20, 20],
@@ -105,6 +147,7 @@
     "enemies": ["nightmare"],
     "gather": [{"item":"dream_fragment","rate":0.4}],
     "connections": [],
+    "costs": {},
     "boss": "nightmare_king"
   }
 }

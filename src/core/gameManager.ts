@@ -77,6 +77,8 @@ export class GameManager {
       },
       achievements: [],
       protectCounts: {},
+      halfTimeAccrued: false,
+      lastDriftDay: 0,
       gameOver: null,
       rngSeed,
       version: 2,
@@ -286,19 +288,52 @@ export class GameManager {
     return { ok: true, message: `${DB.characters[targetId].name}に${item.name}を使った。` };
   }
 
-  // ============ 移動 ============
-  moveTo(mapId: string): { ok: boolean; deaths: string[] } {
+  // ============ 移動（第3巻4-0-2: 区間別コスト／4-0-4嵐／4-0-5潮汐）============
+  canMoveTo(mapId: string): { ok: boolean; reason?: string } {
     const current = DB.maps[this.gs.location];
-    if (!current.connections.includes(mapId)) return { ok: false, deaths: [] };
+    if (!current.connections.includes(mapId)) return { ok: false, reason: "not_connected" };
+    // 保持者が昏睡中は移動不可＝足止め（第3巻4-12の解釈）
+    const holder = this.party.getHolder();
+    if (holder.comaDaysLeft > 0 || holder.exclusion !== "none") {
+      return { ok: false, reason: "holder_coma" };
+    }
+    // 嵐: 海方面（砂浜・浅瀬・孤島・海賊船）進入不可（第3巻4-0-4）
+    if (this.gs.weather === "storm" && DB.maps[mapId].sea_area) {
+      return { ok: false, reason: "storm" };
+    }
+    // 浅瀬⇔孤島は干潮時のみ徒歩可（第3巻4-0-2）
+    if (current.low_tide_only_to?.includes(mapId) && this.gs.tide === "high") {
+      return { ok: false, reason: "high_tide" };
+    }
     // 海賊船は小舟の修理材が必要（第7巻8-7）
     const req = current.requires_for?.[mapId];
     if (req && (this.gs.inventory[req] ?? 0) < 1 && !this.gs.flags[`used_${req}`]) {
-      return { ok: false, deaths: [] };
+      return { ok: false, reason: "need_boat" };
     }
-    if (req && (this.gs.inventory[req] ?? 0) >= 1) {
+    return { ok: true };
+  }
+
+  // 移動コストの時間消費（0.5は2回で1時間帯・第3巻4-0-2）
+  private consumeMoveCost(cost: number): void {
+    if (cost <= 0) return;
+    let whole = Math.floor(cost);
+    if (cost % 1 !== 0) {
+      if (this.gs.halfTimeAccrued) { whole += 1; this.gs.halfTimeAccrued = false; }
+      else this.gs.halfTimeAccrued = true;
+    }
+    if (whole > 0) this.advanceTime(whole);
+  }
+
+  moveTo(mapId: string): { ok: boolean; reason?: string; deaths: string[] } {
+    const check = this.canMoveTo(mapId);
+    if (!check.ok) return { ok: false, reason: check.reason, deaths: [] };
+    const current = DB.maps[this.gs.location];
+    const req = current.requires_for?.[mapId];
+    if (req && (this.gs.inventory[req] ?? 0) >= 1 && !this.gs.flags[`used_${req}`]) {
       this.gs.inventory[req]--;
       this.gs.flags[`used_${req}`] = true;
     }
+    const cost = current.costs?.[mapId] ?? 1;
     this.gs.location = mapId;
     this.gs.exploredToday = true;
     this.phase = DB.maps[mapId].is_base ? "base" : "map";
@@ -308,8 +343,51 @@ export class GameManager {
     for (const d of deaths) {
       if (d.charId === this.gs.holder) this.triggerGameOver("holder_death");
     }
-    this.advanceTime(1);
+    this.consumeMoveCost(cost);
     return { ok: true, deaths: deaths.map((d) => d.charId) };
+  }
+
+  // ============ 漂着物（第3巻4-8: 毎日1回・嵐翌日2倍）============
+  collectDrift(): string[] {
+    if (this.gs.lastDriftDay >= this.gs.day) return [];
+    this.gs.lastDriftDay = this.gs.day;
+    const table = DB.config.field.drift_table as { item: string; weight: number }[];
+    const total = table.reduce((s, t) => s + t.weight, 0);
+    const count = this.gs.prevWeather === "storm" ? 2 : 1; // 嵐の翌日は漂着物2倍（第14巻18-9）
+    const found: string[] = [];
+    for (let i = 0; i < count; i++) {
+      let roll = this.rng.next() * total;
+      for (const t of table) {
+        roll -= t.weight;
+        if (roll <= 0) {
+          this.gs.inventory[t.item] = (this.gs.inventory[t.item] ?? 0) + 1;
+          found.push(t.item);
+          break;
+        }
+      }
+    }
+    return found;
+  }
+
+  // ============ 満潮の浅瀬・滞在超過の溺水判定（第3巻4-0-5）============
+  fieldDrownCheck(): { saved: boolean; deaths: string[]; goReason: GOReason | null } {
+    // レニィが保持者→全員無効
+    if (this.gs.holder === "renny") return { saved: true, deaths: [], goReason: null };
+    // 水の女神の加護（供物継続中）→救済
+    if (this.tribute.remainingDays("water") >= 0) {
+      return { saved: true, deaths: [], goReason: null };
+    }
+    // 救済なし: レニィ以外は溺死
+    const deaths: string[] = [];
+    let goReason: GOReason | null = null;
+    for (const c of this.party.getActiveMembers()) {
+      if (c.id === "renny") continue;
+      c.exclusion = "dead";
+      deaths.push(c.id);
+      if (c.id === this.gs.holder) goReason = "holder_death";
+    }
+    if (goReason) this.triggerGameOver(goReason);
+    return { saved: false, deaths, goReason };
   }
 
   // ============ 戦闘 ============

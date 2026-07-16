@@ -211,14 +211,26 @@ export interface MapDef {
   enemies: string[];
   night_enemies?: string[];
   night_no_pirates?: boolean;
+  night_fireball_bonus?: number;   // 夜の火の玉密度+30%（第3巻4-2）
+  ash_density_bonus?: number;      // 火山灰で敵密度+20%（第3巻4-2）
   no_respawn?: boolean;
   gather: { item: string; rate: number; respawn?: string; low_tide_only?: boolean; risk_battle?: number }[];
   connections: string[];
+  costs: Record<string, number>;   // 移動コスト(時間帯・第3巻4-0-2。0.5は2回で1)
   is_base?: boolean;
   tidal?: boolean;
+  high_tide_timer_sec?: number;    // 満潮滞在制限（第3巻4-0-5: 90秒）
+  low_tide_only_to?: string[];     // 干潮時のみ通行可能な接続先（第3巻4-0-2）
   has_shrine?: Goddess;
   boss?: string;
-  drift_point?: boolean;
+  drift_point?: boolean;           // 漂着物ポイント（第3巻4-8）
+  fishing?: boolean;               // 釣り可能（第3巻4-4/4-9・釣り竿所持で解放）
+  lava_hazard?: boolean;           // 溶岩流（第3巻4-1）
+  rockfall?: boolean;              // 落石地帯（第3巻4-2）
+  fire_grace?: boolean;            // 炎の女神の加護演出（第3巻4-2）
+  fog_wander?: boolean;            // 霧で迷う（第3巻4-4）
+  sanctuary?: boolean;             // 聖域（敵なし）
+  sea_area?: boolean;              // 嵐で進入不可（第3巻4-0-4）
   paralysis_death_zone?: boolean;
   paralysis_death_zone_high_tide?: boolean;
   requires_for?: Record<string, string>;
@@ -279,6 +291,8 @@ export interface GameState {
   };
   achievements: string[];
   protectCounts: Record<string, number>;   // 庇う成功回数 "from>to"（第4巻5-4-4）
+  halfTimeAccrued: boolean;                // 0.5時間帯コストの繰越（第3巻4-0-2）
+  lastDriftDay: number;                    // 漂着物の最終取得日（第3巻4-8: 毎日1回）
   gameOver: GOReason | null;
   rngSeed: number;
   version: number;

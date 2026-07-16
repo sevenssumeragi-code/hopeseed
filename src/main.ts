@@ -14,6 +14,9 @@ let field: FieldState | null = null;
 let battle: BattleManager | null = null;
 let battleMembers: string[] = [];
 let nightBattle: { kind: "dream"; dreamer: string } | { kind: "raid" } | null = null;
+let tideTimerStart = 0;        // 満潮浅瀬の滞在開始時刻(ms)・第3巻4-0-5
+let lastRockfallCheck = 0;
+let shrineCooldownUntil = 0;   // 参拝直後の再接触防止
 let logBuffer: string[] = [];
 let fieldRAF = 0;
 
@@ -405,7 +408,7 @@ function renderBase(): void {
       (b as HTMLElement).onclick = () => {
         const to = (b as HTMLElement).dataset.to!;
         const r = gm.moveTo(to);
-        if (!r.ok) { log("そこへはまだ行けない。"); return; }
+        if (!r.ok) { log(MOVE_FAIL_REASONS[r.reason ?? ""] ?? "そこへはまだ行けない。"); return; }
         log(`${DB.maps[to].name}へ向かった。`);
         for (const d of r.deaths) log(`${DB.characters[d].name}はしびれたまま危険地帯に踏み込み、還らなかった…`, true);
         if (gm.phase === ("gameover" as typeof gm.phase)) { renderPhase(); return; }
@@ -453,16 +456,85 @@ function startField(mapId: string): void {
   const bossDefeated = !!gm.gs.flags[`${DB.maps[mapId].boss}_defeated`];
   // 加護のエンカウント補正（第14巻18-2: ジンパチ保持者=登山道−40%/レニィ保持者=浅瀬−40%）
   let densityMult = 1.0;
-  if (gm.gs.holder === "jinpachi" && mapId === "volcano") densityMult = 0.6;
+  if (gm.gs.holder === "jinpachi" && mapId === "trail") densityMult = 0.6;
   if (gm.gs.holder === "renny" && mapId === "shallows") densityMult = 0.6;
   if ((gm.gs.inventory["torch"] ?? 0) > 0 && gm.gs.slot === "night") densityMult -= 0.10;
   field = new FieldState(mapId, gm.rng, gm.gs.slot, {
     bossDefeated, day: gm.gs.day, densityMult,
     piratesStopped: !!gm.gs.flags["pirates_stopped"],
+    weather: gm.gs.weather,
+    hasFishingRod: (gm.gs.inventory["fishing_rod"] ?? 0) > 0,
+    driftAvailable: gm.gs.lastDriftDay < gm.gs.day,
   });
+  // 炎の女神の加護（第3巻4-2: 供物継続時、まれに敵を焼き払う・固定文言）
+  if (DB.maps[mapId].fire_grace && gm.tribute.remainingDays("fire") >= 0) {
+    const burned = field.applyFireGrace();
+    if (burned) log("火の女神の力で敵が炎に包まれる！", true);
+  }
+  tideTimerStart = 0;
   gm.phase = DB.maps[mapId].is_base ? "base" : "map";
   if (gm.phase === "base") { renderPhase(); return; }
   renderField();
+}
+
+// フィールド毎フレーム処理: 満潮タイマー（第3巻4-0-5）・落石（第3巻4-2）
+function fieldTick(): "drown" | null {
+  if (!field) return null;
+  const map = field.map;
+  const now = performance.now();
+  // 満潮の浅瀬: 実時間90秒制限
+  if (map.high_tide_timer_sec && gm.gs.tide === "high" && gm.gs.holder !== "renny") {
+    if (tideTimerStart === 0) tideTimerStart = now;
+    const left = map.high_tide_timer_sec - (now - tideTimerStart) / 1000;
+    const el = document.querySelector("#tide-timer");
+    if (el) el.textContent = `🌊 水かさが増している……残り${Math.max(0, Math.ceil(left))}秒`;
+    if (left <= 0) return "drown";
+  } else {
+    tideTimerStart = 0;
+    const el = document.querySelector("#tide-timer");
+    if (el) el.textContent = "";
+  }
+  // 落石地帯: ランダムで落石→技量判定（第3巻4-2）
+  if (map.rockfall && now - lastRockfallCheck > 1000) {
+    lastRockfallCheck = now;
+    const f = DB.config.field;
+    if (gm.rng.chance(f.rockfall_chance_per_sec)) {
+      const holder = gm.party.getHolder();
+      const dodge = f.rockfall_dodge_base + effectiveSkl(holder) * f.rockfall_dodge_skl_factor;
+      if (gm.rng.chance(Math.min(95, dodge) / 100)) {
+        log("落石だ！　間一髪でかわした！");
+      } else {
+        const dmg = Math.max(1, Math.round(holder.maxHp * f.rockfall_damage_ratio));
+        holder.hp = Math.max(1, holder.hp - dmg);
+        log(`落石だ！　${DB.characters[holder.id].name}に${dmg}のダメージ！`, true);
+        renderHUD();
+      }
+    }
+  }
+  return null;
+}
+
+function effectiveSkl(c: CharacterState): number {
+  return Math.round(DB.characters[c.id].base.skl + DB.characters[c.id].growth.skl * (c.level - 1));
+}
+
+function handleFieldDrown(): void {
+  cancelAnimationFrame(fieldRAF);
+  const r = gm.fieldDrownCheck();
+  if (r.saved) {
+    log("水の女神の加護でみんなは溺死から救われた！　砂浜へ押し流された……", true);
+    gm.gs.location = "beach";
+    gm.phase = "map";
+    startField("beach");
+    renderHUD();
+    return;
+  }
+  for (const d of r.deaths) log(`${DB.characters[d].name}は波に呑まれた……`, true);
+  if (gm.phase === "gameover") { renderPhase(); return; }
+  gm.gs.location = "beach";
+  gm.phase = "map";
+  startField("beach");
+  renderHUD();
 }
 
 function renderField(): void {
@@ -472,6 +544,7 @@ function renderField(): void {
     <div class="field-overlay">
       <b>${field.map.name}</b><br>
       <span style="font-size:11px">矢印キー/WASDで移動。旗で移動、🌿で採取${field.map.has_shrine ? "、⛩️で参拝" : ""}</span>
+      <div id="tide-timer" style="color:var(--danger);font-weight:bold"></div>
     </div>
     <div class="field-actions">
       <button class="small" id="f-back">🏕️ 拠点へ戻る</button>
@@ -497,6 +570,7 @@ function renderField(): void {
 
   const loop = () => {
     if (gm.phase !== "map" || !field) return;
+    if (fieldTick() === "drown") { handleFieldDrown(); return; }
     let dx = 0, dy = 0;
     const sp = 0.12;
     if (keys.has("ArrowUp") || keys.has("w")) dy -= sp;
@@ -511,14 +585,56 @@ function renderField(): void {
   fieldRAF = requestAnimationFrame(loop);
 }
 
+const MOVE_FAIL_REASONS: Record<string, string> = {
+  storm: "嵐だ……海には近づけない。",
+  high_tide: "満潮で徒歩ルートが水没している。干潮（朝・昼）を待とう。",
+  need_boat: "小舟の修理材がないと渡れない。（工作: 木材×5+帆布×1）",
+  holder_coma: "保持者が昏睡していて、みんなを導けない……",
+};
+
 function handleFieldContact(s: FieldSymbol): void {
   if (!field) return;
   switch (s.kind) {
+    case "hazard": {
+      // 溶岩流（第3巻4-1: 触れるとダメージ+大火傷判定）
+      const f = DB.config.field;
+      const holder = gm.party.getHolder();
+      const dmg = Math.max(1, Math.round(holder.maxHp * f.lava_damage_ratio));
+      holder.hp = Math.max(1, holder.hp - dmg);
+      let msg = `溶岩流だ！　${DB.characters[holder.id].name}に${dmg}のダメージ！`;
+      const burnImmune = holder.id === "jinpachi"
+        && (DB.characters["jinpachi"].ability_battle as any).burn_immunity;
+      if (!burnImmune && holder.status.burn === undefined && gm.rng.chance(f.lava_burn_chance)) {
+        holder.status.burn = DB.config.status_timers.burn_death_days;
+        msg += "　大火傷を負った！";
+      }
+      log(msg, true);
+      renderHUD();
+      field.removeSymbol(s);
+      fieldRAF = requestAnimationFrame(() => renderFieldLoopResume());
+      return;
+    }
+    case "drift": {
+      // 漂着物（第3巻4-8: 毎日1回・嵐翌日2倍）
+      const found = gm.collectDrift();
+      for (const id of found) log(`浜辺に${DB.items[id].name}が流れ着いていた！`);
+      field.removeSymbol(s);
+      fieldRAF = requestAnimationFrame(() => renderFieldLoopResume());
+      return;
+    }
+    case "fishing": {
+      // 釣り（第3巻4-4: 供物の魚を安定確保）
+      gm.gs.inventory["fish"] = (gm.gs.inventory["fish"] ?? 0) + 1;
+      log("魚を釣り上げた！（供物にも食料にもなる）");
+      field.removeSymbol(s);
+      fieldRAF = requestAnimationFrame(() => renderFieldLoopResume());
+      return;
+    }
     case "exit": {
       cancelAnimationFrame(fieldRAF);
       const r = gm.moveTo(s.exitTo!);
       if (!r.ok) {
-        log(`${DB.maps[s.exitTo!].name}へは渡れない。（小舟の修理材が必要かもしれない）`);
+        log(MOVE_FAIL_REASONS[r.reason ?? ""] ?? `${DB.maps[s.exitTo!].name}へは渡れない。`);
         gm.phase = "map";
         renderFieldLoopResume();
         return;
@@ -540,6 +656,10 @@ function handleFieldContact(s: FieldSymbol): void {
       return;
     }
     case "shrine": {
+      if (performance.now() < shrineCooldownUntil) {
+        fieldRAF = requestAnimationFrame(() => renderFieldLoopResume());
+        return;
+      }
       cancelAnimationFrame(fieldRAF);
       openShrine(s.shrine as "fire" | "water");
       return;
@@ -566,6 +686,7 @@ function renderFieldLoopResume(): void {
   if (!canvas || !field) return;
   const loop = () => {
     if (gm.phase !== "map" || !field) return;
+    if (fieldTick() === "drown") { handleFieldDrown(); return; }
     let dx = 0, dy = 0;
     const sp = 0.12;
     if (keys.has("ArrowUp") || keys.has("w")) dy -= sp;
@@ -580,6 +701,12 @@ function renderFieldLoopResume(): void {
   fieldRAF = requestAnimationFrame(loop);
 }
 
+function nudgeAwayFromShrine(): void {
+  // 参拝後にプレイヤーを祠の接触半径外へ＋数秒の再接触クールダウン
+  if (field) field.py = Math.min(field.map.size[1] - 1, field.py + 2.5);
+  shrineCooldownUntil = performance.now() + 4000;
+}
+
 function openShrine(goddess: "fire" | "water"): void {
   const name = goddess === "fire" ? "炎の女神の祠" : "水の女神の祠";
   const family = goddess === "fire" ? "meat" : "fish";
@@ -590,13 +717,14 @@ function openShrine(goddess: "fire" | "water"): void {
     `供物の期限：あと${left}日\n\n` +
     (offers.length === 0 ? "捧げられる供物を持っていない…\n" :
       offers.map(([id, n]) => `<button class="small offer-btn" data-id="${id}">${DB.items[id].name} ×${n} を捧げる</button>`).join(" ")),
-    () => { gm.phase = "map"; renderFieldLoopResume(); });
+    () => { nudgeAwayFromShrine(); gm.phase = "map"; renderFieldLoopResume(); });
   document.querySelectorAll(".offer-btn").forEach((b) => {
     (b as HTMLElement).onclick = () => {
       const r = gm.tribute.offer(goddess, (b as HTMLElement).dataset.id!);
       log(r.line, true);
       document.querySelector(".modal-back")?.remove();
       renderHUD();
+      nudgeAwayFromShrine();
       gm.phase = "map";
       renderFieldLoopResume();
     };

@@ -5,6 +5,7 @@ import { GameManager } from "../src/core/gameManager.js";
 import { protectRate, applyBuffStage, calcHit, fleeRate, tameRate, persuadeRate } from "../src/core/battle/damageCalc.js";
 import { RNG } from "../src/core/rng.js";
 import { scaleEnemy } from "../src/core/battle/battleManager.js";
+import { FieldState } from "../src/field/field.js";
 import {
   statAtLevel, enhanceStage, enhancedSkill, expToNext, skillsForCharacter,
 } from "../src/core/stats.js";
@@ -1055,6 +1056,170 @@ test("[戦闘] 勝利時SP回復=最大の10%（5-11-1）", () => {
   gm.settleBattle();
   const geru = gm.gs.party["geru"];
   assert(geru.sp >= Math.round(geru.maxSp * 0.10), `SP10%回復 (${geru.sp})`);
+});
+
+console.log("[M4] フィールド（第3巻・正本）");
+
+test("[マップ] 島構成: 登山道と火山山頂の分割・11エリア", () => {
+  assert(!!DB.maps["trail"], "登山道");
+  assert(!!DB.maps["volcano_summit"], "火山山頂");
+  assertEq(DB.maps["volcano_summit"].has_shrine, "fire", "山頂に炎の祠");
+  assertEq(DB.maps["trail"].boss, "volcano_lord", "登山道最深部に火山の主");
+  assertEq(DB.maps["shallows"].boss, "deep_sea_nushi", "ヌシは浅瀬");
+  assertEq(DB.maps["shrine_islet"].enemies.length, 0, "孤島は聖域(敵なし)");
+  assertEq(DB.maps["volcano_summit"].enemies.length, 0, "山頂は聖域(敵なし)");
+  assertEq(Object.keys(DB.maps).length, 11, "11エリア");
+});
+
+test("[移動] コスト: 拠点⇔森=0/森→荒野→登山道→山頂=各1（4-0-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  assertEq(gm.gs.slot, "morning", "朝スタート");
+  gm.moveTo("forest_lake");
+  assertEq(gm.gs.slot, "morning", "拠点→森はコスト0");
+  gm.moveTo("wasteland");
+  assertEq(gm.gs.slot, "noon", "森→荒野=1");
+  gm.moveTo("trail");
+  assertEq(gm.gs.slot, "evening", "荒野→登山道=1");
+  gm.moveTo("volcano_summit");
+  assertEq(gm.gs.slot, "night", "登山道→山頂=1（拠点→山頂=3時間帯・ほぼ1日仕事）");
+});
+
+test("[移動] 0.5コスト: 山頂→登山道(下り)は2回分で1時間帯", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  gm.gs.location = "volcano_summit";
+  const slot0 = gm.gs.slot;
+  gm.moveTo("trail"); // 0.5 → 繰越
+  assertEq(gm.gs.slot, slot0, "時間帯は進まない");
+  assert(gm.gs.halfTimeAccrued, "0.5繰越");
+  gm.gs.location = "beach";
+  gm.moveTo("shallows"); // 0.5 + 繰越0.5 = 1
+  assert(!gm.gs.halfTimeAccrued, "繰越消化");
+});
+
+test("[移動] 嵐: 海方面（砂浜・浅瀬・孤島・海賊船）進入不可（4-0-4）", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  gm.gs.weather = "storm";
+  gm.gs.location = "grassland";
+  assertEq(gm.canMoveTo("beach").reason, "storm", "砂浜不可");
+  gm.gs.location = "beach";
+  assertEq(gm.canMoveTo("shallows").reason, "storm", "浅瀬不可");
+  gm.gs.weather = "clear";
+  assert(gm.canMoveTo("shallows").ok, "晴れなら可");
+});
+
+test("[移動] 浅瀬⇔孤島は干潮時のみ徒歩可（4-0-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  gm.gs.location = "shallows";
+  gm.gs.tide = "high";
+  assertEq(gm.canMoveTo("shrine_islet").reason, "high_tide", "満潮は不可");
+  gm.gs.tide = "low";
+  assert(gm.canMoveTo("shrine_islet").ok, "干潮は可");
+  // 孤島から帰る側も同様（満潮なら祠で待機）
+  gm.gs.location = "shrine_islet";
+  gm.gs.tide = "high";
+  assertEq(gm.canMoveTo("shallows").reason, "high_tide", "帰路も水没");
+});
+
+test("[移動] 保持者昏睡=足止め（4-12の解釈: GOしない）", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  gm.statusFx.apply("neo", "coma", "nightmare");
+  assertEq(gm.canMoveTo("forest_lake").reason, "holder_coma", "移動不可");
+  assertEq(gm.gs.gameOver, null, "GOではない");
+});
+
+test("[フィールド] 聖域は敵シンボルなし・登山道は敵あり", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  const summit = new FieldState("volcano_summit", gm.rng, "noon");
+  assertEq(summit.symbols.filter((x) => x.kind === "enemy").length, 0, "山頂=敵0");
+  assert(summit.symbols.some((x) => x.kind === "shrine"), "祭壇あり");
+  assert(summit.symbols.some((x) => x.kind === "hazard"), "溶岩流あり");
+  const trail = new FieldState("trail", gm.rng, "noon", { day: 1 });
+  assert(trail.symbols.filter((x) => x.kind === "enemy").length > 0, "登山道=敵あり");
+});
+
+test("[フィールド] 炎の女神の加護: 供物継続時に敵を焼き払う（4-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  const orig = DB.config.field.fire_grace_chance;
+  (DB.config.field as any).fire_grace_chance = 1.0;
+  try {
+    const trail = new FieldState("trail", gm.rng, "noon", { day: 1 });
+    const before = trail.symbols.filter((x) => x.kind === "enemy").length;
+    const burned = trail.applyFireGrace();
+    assert(burned !== null, "敵が焼かれた");
+    assertEq(trail.symbols.filter((x) => x.kind === "enemy").length, before - 1, "敵-1");
+  } finally {
+    (DB.config.field as any).fire_grace_chance = orig;
+  }
+});
+
+test("[フィールド] 漂着物: 毎日1回・嵐の翌日は2倍（4-8/18-9）", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42);
+  const found = gm.collectDrift();
+  assertEq(found.length, 1, "1個");
+  assertEq(gm.collectDrift().length, 0, "同日2回目はなし");
+  passDay(gm);
+  gm.gs.prevWeather = "storm";
+  assertEq(gm.collectDrift().length, 2, "嵐翌日は2倍");
+});
+
+test("[フィールド] 満潮滞在超過の溺水判定（4-0-5）", () => {
+  // レニィ保持者→全員無効
+  const gm1 = new GameManager();
+  gm1.newGame("renny", 42);
+  assertEq(gm1.fieldDrownCheck().saved, true, "レニィ保持者=無効");
+  // 水の供物継続→救済
+  const gm2 = new GameManager();
+  gm2.newGame("neo", 42);
+  assertEq(gm2.fieldDrownCheck().saved, true, "水の女神の救済");
+  // 供物切れ→レニィ以外溺死・保持者死亡GO
+  const gm3 = new GameManager();
+  gm3.newGame("neo", 42);
+  gm3.gs.tribute.waterLastDay = -30;
+  const r = gm3.fieldDrownCheck();
+  assertEq(r.saved, false, "救済なし");
+  assert(r.deaths.includes("neo"), "保持者溺死");
+  assertEq(gm3.gs.gameOver, "holder_death", "GO1");
+  assertEq(gm3.gs.party["renny"].exclusion, "none", "レニィは溺れない");
+});
+
+test("[受け入れ基準M4] 供物遠征: 拠点→火山→拠点が通しで遊べる", () => {
+  const gm = new GameManager();
+  gm.newGame("geru", 42);
+  gm.gs.inventory["meat"] = 1;
+  const day0 = gm.gs.day;
+
+  // 往路: 拠点(朝)→森(0)→荒野(昼)→登山道(夕)→山頂(夜)
+  assert(gm.moveTo("forest_lake").ok, "森へ");
+  assert(gm.moveTo("wasteland").ok, "荒野へ");
+  assert(gm.moveTo("trail").ok, "登山道へ");
+  assert(gm.moveTo("volcano_summit").ok, "山頂へ");
+  assertEq(gm.gs.day, day0, "同日中に到着");
+  assertEq(gm.gs.slot, "night", "夜に到着（3時間帯消費）");
+
+  // 供物奉納
+  const offer = gm.tribute.offer("fire", "meat");
+  assert(offer.ok, "肉を捧げた");
+  assertEq(gm.tribute.remainingDays("fire"), 14, "期限リセット");
+
+  // 復路: 山頂→登山道(0.5)→夜のまま→荒野(1)→日跨ぎ→森(1)→拠点(0)
+  for (const c of Object.values(gm.gs.party)) { c.satiety = 100; c.starveDays = 0; }
+  assert(gm.moveTo("trail").ok, "下山");
+  assertEq(gm.gs.day, day0, "0.5繰越で夜のまま");
+  assert(gm.moveTo("wasteland").ok, "荒野へ");
+  assertEq(gm.gs.day, day0 + 1, "夜の移動で日付が変わる");
+  assert(gm.moveTo("forest_lake").ok, "森へ");
+  assert(gm.moveTo("base").ok, "帰還");
+  assertEq(gm.gs.location, "base", "拠点");
+  assertEq(gm.phase, "base", "拠点フェーズ");
+  assertEq(gm.gs.gameOver, null, "生還");
 });
 
 console.log("[M3.5] 夜イベント戦闘（M2フック接続）");

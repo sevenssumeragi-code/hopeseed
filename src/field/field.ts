@@ -7,7 +7,7 @@ import type { RNG } from "../core/rng.js";
 import type { MapDef, TimeSlot } from "../types.js";
 
 export interface FieldSymbol {
-  kind: "enemy" | "gather" | "exit" | "shrine" | "boss";
+  kind: "enemy" | "gather" | "exit" | "shrine" | "boss" | "hazard" | "drift" | "fishing";
   x: number; y: number;
   enemyId?: string;
   gatherItem?: string;
@@ -24,7 +24,8 @@ const AREA_COLORS: Record<string, [string, string]> = {
   forest_lake: ["#2c5a3c", "#1e4a30"],
   grassland: ["#4a6a34", "#3a5a28"],
   wasteland: ["#5a4a3a", "#4a3a2c"],
-  volcano: ["#6a3a2c", "#552a20"],
+  trail: ["#6a3a2c", "#552a20"],
+  volcano_summit: ["#7a2c1c", "#601c10"],
   beach: ["#8a7a52", "#7a6a44"],
   shallows: ["#2c5a7a", "#1e4a6a"],
   shrine_islet: ["#3a6a7a", "#2c5a6a"],
@@ -42,8 +43,13 @@ export class FieldState {
   private densityMult: number;
   private piratesStopped: boolean;
 
+  private weather: string;
+  private hasFishingRod: boolean;
+  private driftAvailable: boolean;
+
   constructor(mapId: string, rng: RNG, slot: TimeSlot, opts?: {
     bossDefeated?: boolean; day?: number; densityMult?: number; piratesStopped?: boolean;
+    weather?: string; hasFishingRod?: boolean; driftAvailable?: boolean;
   }) {
     this.mapId = mapId;
     this.map = DB.maps[mapId];
@@ -51,6 +57,9 @@ export class FieldState {
     this.day = opts?.day ?? 1;
     this.densityMult = opts?.densityMult ?? 1.0;
     this.piratesStopped = opts?.piratesStopped ?? false;
+    this.weather = opts?.weather ?? "clear";
+    this.hasFishingRod = opts?.hasFishingRod ?? false;
+    this.driftAvailable = opts?.driftAvailable ?? false;
     this.px = this.map.size[0] / 2;
     this.py = this.map.size[1] - 2;
     this.populate(slot, opts?.bossDefeated ?? false);
@@ -85,6 +94,14 @@ export class FieldState {
     }
     if (pool.length > 0) {
       let count = isNight ? this.map.density_night : this.map.density_day;
+      // 火山灰: 火山系エリアの敵密度+20%（第3巻4-2）
+      if (this.weather === "ash" && this.map.ash_density_bonus) {
+        count *= 1 + this.map.ash_density_bonus;
+      }
+      // 夜間は火の玉の出現密度+30%（第3巻4-2）
+      if (isNight && this.map.night_fireball_bonus) {
+        count *= 1 + this.map.night_fireball_bonus;
+      }
       count = Math.max(1, Math.round(count * this.densityMult));
       for (let i = 0; i < count; i++) {
         const enemyId = this.rng.pick(pool);
@@ -109,6 +126,24 @@ export class FieldState {
         });
       }
     }
+    // 溶岩流（第3巻4-1: 触れるとダメージ+大火傷判定）
+    if (this.map.lava_hazard) {
+      for (let i = 0; i < 4; i++) {
+        this.symbols.push({
+          kind: "hazard",
+          x: this.rng.range(3, w - 3), y: this.rng.range(4, h - 4),
+          dx: 0, dy: 0,
+        });
+      }
+    }
+    // 漂着物ポイント（第3巻4-8: 毎日1回）
+    if (this.map.drift_point && this.driftAvailable) {
+      this.symbols.push({ kind: "drift", x: this.rng.range(3, w - 3), y: h - 3, dx: 0, dy: 0 });
+    }
+    // 釣りポイント（第3巻4-4/4-9: 釣り竿所持で解放・魚の安定供給）
+    if (this.map.fishing && this.hasFishingRod) {
+      this.symbols.push({ kind: "fishing", x: this.rng.range(3, w - 3), y: this.rng.range(3, h / 2), dx: 0, dy: 0 });
+    }
     // 祠
     if (this.map.has_shrine) {
       this.symbols.push({ kind: "shrine", x: w / 2, y: 2, shrine: this.map.has_shrine, dx: 0, dy: 0 });
@@ -117,6 +152,17 @@ export class FieldState {
     if (this.map.boss && !bossDefeated) {
       this.symbols.push({ kind: "boss", x: w / 2, y: 1.5, bossId: this.map.boss, dx: 0, dy: 0 });
     }
+  }
+
+  // 炎の女神の加護（第3巻4-2: 供物継続時、まれに敵を焼き払う）
+  applyFireGrace(): string | null {
+    if (!this.map.fire_grace) return null;
+    const enemies = this.symbols.filter((s) => s.kind === "enemy");
+    if (enemies.length === 0) return null;
+    if (!this.rng.chance(DB.config.field.fire_grace_chance)) return null;
+    const target = this.rng.pick(enemies);
+    this.removeSymbol(target);
+    return DB.enemies[target.enemyId!]?.name ?? null;
   }
 
   // 移動。接触イベントを返す
@@ -219,6 +265,7 @@ export class FieldState {
     const drawList = [...this.symbols].sort((a, b) => a.y - b.y);
     const emoji: Record<string, string> = {
       enemy: "👹", gather: "🌿", exit: "🚩", shrine: "⛩️", boss: "💀",
+      hazard: "🌋", drift: "📦", fishing: "🎣",
     };
     for (const s of drawList) {
       const [sx, sy, sc] = proj(s.x, s.y);
