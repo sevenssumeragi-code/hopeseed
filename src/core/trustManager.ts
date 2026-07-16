@@ -9,8 +9,6 @@ export function pairKey(a: string, b: string): string {
 }
 
 export class TrustManager {
-  protectCounters: Record<string, number> = {};
-
   constructor(private gs: GameState) {}
 
   static initTrust(): Record<string, number> {
@@ -60,16 +58,23 @@ export class TrustManager {
     return vals.reduce((s, v) => s + v, 0) / vals.length;
   }
 
-  // 庇う成功: カウンタ加算＋信頼度上昇＋特別シナリオ判定（第0巻0-3-7）
+  // 庇う成功（第4巻5-4-4）: 方向付きカウンタ protect_count[from][to] ＋当該ペア+3
+  // 累計3/7/15回で庇う特別掛け合いシナリオ解放（第11巻）
   onProtectSuccess(from: string, to: string): string | null {
-    const key = pairKey(from, to);
-    this.protectCounters[key] = (this.protectCounters[key] ?? 0) + 1;
-    this.add(from, to, DB.trust.gain.protect_success, "protect_success");
+    const key = `${from}>${to}`;
+    this.gs.protectCounts[key] = (this.gs.protectCounts[key] ?? 0) + 1;
+    this.add(from, to, DB.config.trust_battle.protect_success, "protect_success");
     this.gs.stats.protectSuccess++;
-    const thresholds: number[] = DB.config.trust.protect_special_thresholds;
-    if (thresholds.includes(this.protectCounters[key])) {
-      return `protect_special_${key}_${this.protectCounters[key]}`;
+    const thresholds: number[] = DB.config.protect.special_thresholds;
+    if (thresholds.includes(this.gs.protectCounts[key])) {
+      return `protect_special_${key}_${this.gs.protectCounts[key]}`;
     }
     return null;
+  }
+
+  // 全ペア信頼度合計（取り憑き抵抗・第4巻5-9）
+  totalOf(id: string): number {
+    const others = Object.keys(this.gs.party).filter((x) => x !== id);
+    return others.reduce((s, o) => s + (this.gs.trust[pairKey(id, o)] ?? 0), 0);
   }
 }

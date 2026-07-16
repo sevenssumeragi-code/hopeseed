@@ -1,5 +1,5 @@
-// ダメージ計算（GDD第16巻20-6正本 + 第6巻7-0-1効果対応 + 第8巻弱点系統）。
-// バフ段階: +1段=×1.25／−1段=×0.8（第6巻7-0-1）・±2段まで。
+// ダメージ・命中・庇う計算（GDD第4巻5-5/5-6/5-4-4 正本 + 第6巻7-0-1）。
+// バフ段階: +1段×1.25/+2段×1.5625(上限)、−1段×0.8/−2段×0.64（第4巻5-5-4）。
 
 import { DB } from "../../dataLoader.js";
 import { enhanceStage } from "../stats.js";
@@ -9,16 +9,16 @@ import type { Skill, SkillEffect } from "../../types.js";
 export interface Combatant {
   id: string;
   isEnemy: boolean;
-  family?: string;              // 敵のみ
+  family?: string;
   isBoss?: boolean;
   level: number;
   hp: number;
   maxHp: number;
-  atk: number;
-  def: number;
+  atk: number;                 // パッシブ・大火傷補正適用済みの実効値
+  def: number;                 // 同上（闇の加護等適用済み）
   mag: number | null;
   buffs: Record<string, number>;
-  weaknessFamily?: string | null; // 味方のみ（第8巻: この系統との戦闘で全能力0.7倍）
+  weaknessFamily?: string | null;
   isGuarding: boolean;
   hasPoison?: boolean;
   hasAnyStatus?: boolean;
@@ -27,18 +27,19 @@ export interface Combatant {
 
 export interface DamageContext {
   slot: string;
+  location: string;
   protectedTarget: boolean;
-  geruInBattleAlive: boolean;
-  goddessInParty: boolean;      // 弱点無効（第0巻矛盾#1）
-  enemyFamilies: string[];      // 戦闘中の敵系統（弱点判定用）
+  geruLeadership: boolean;      // ゲル参加中・戦闘不能でない・非保持者（第4巻5-5-3）
+  goddessInParty: boolean;
+  enemyFamilies: string[];
   rng: RNG;
   awakenedLionProc?: boolean;
-  neoNonHolder?: boolean;       // 魔法剣: 非保持者ネオの魔術×1.4
-  lightMult?: number;           // 首魁: 光属性被ダメ×2.0
-  fixedVariance?: number;       // テスト用
+  neoNonHolder?: boolean;
+  lightMult?: number;
+  fixedVariance?: number;
 }
 
-// 段階制バフ: +1段×1.25 / −1段×0.8（乗算累積・±2段）
+// 段階制バフ（第4巻5-5-4: +1=×1.25/+2=×1.5625相当。−1=×0.8/−2=×0.64）
 export function applyBuffStage(stat: number, stage: number): number {
   const cap = DB.config.damage.buff_stage_cap;
   const s = Math.max(-cap, Math.min(cap, stage));
@@ -59,7 +60,7 @@ function antiDemon(skill: Skill, target: Combatant): number {
   return 1.0;
 }
 
-// 弱点系統補正（第8巻）: 使用者の弱点系統の敵がいる戦闘では全能力0.7倍。女神在籍で無効。
+// 弱点系統補正（第4巻5-5-3: 全能力×0.7。女神「弱点浄化」で無効）
 export function weaknessStatMult(
   weaknessFamily: string | null | undefined,
   ctx: Pick<DamageContext, "enemyFamilies" | "goddessInParty">,
@@ -74,23 +75,24 @@ function hpScaling(user: Combatant, skill: Skill): number {
   const e = skill.effects.find((x: SkillEffect) => x.type === "hp_scaling");
   if (!e) return 1.0;
   const ratio = user.hp / user.maxHp;
-  if (e.mode === "below_half") return ratio <= 0.5 ? (e.mult ?? 1.3) : 1.0; // 希望の一閃
-  if (e.mode === "missing") return 1 + (1 - ratio) * (e.mult ?? 1.0);        // 魂の拳
+  if (e.mode === "below_half") return ratio <= 0.5 ? (e.mult ?? 1.3) : 1.0;
+  if (e.mode === "missing") return 1 + (1 - ratio) * (e.mult ?? 1.0);
   return 1.0;
 }
 
 function selfStatusBonus(user: Combatant, skill: Skill): number {
   const e = skill.effects.find((x: SkillEffect) => x.type === "self_status_bonus");
-  if (e && user.hasAnyStatus) return e.mult ?? 2.0; // シシの牙
+  if (e && user.hasAnyStatus) return e.mult ?? 2.0;
   return 1.0;
 }
 
 function poisonTargetBonus(target: Combatant, skill: Skill): number {
   const e = skill.effects.find((x: SkillEffect) => x.type === "poison_target_bonus");
-  if (e && target.hasPoison) return e.mult ?? 1.5; // 終焉の影
+  if (e && target.hasPoison) return e.mult ?? 1.5;
   return 1.0;
 }
 
+// ダメージ計算（第4巻5-5）
 export function calcDamage(
   user: Combatant, target: Combatant, skill: Skill, ctx: DamageContext,
 ): number {
@@ -99,10 +101,8 @@ export function calcDamage(
   let stat = skill.kind === "magic" ? (user.mag ?? 0) : user.atk;
   const statKey = skill.kind === "magic" ? "mag" : "atk";
   stat = applyBuffStage(stat, user.buffs[statKey] ?? user.buffs["atk"] ?? 0);
-  if (ctx.geruInBattleAlive && !user.isEnemy) stat *= c.geru_leadership_mult;
-  // 弱点系統: 使用者の出力低下
+  if (ctx.geruLeadership && !user.isEnemy) stat *= c.geru_leadership_mult;
   stat *= weaknessStatMult(user.weaknessFamily, ctx);
-  // 魔法剣（第6巻7-7: 非保持者ネオの魔術威力×1.4）
   if (ctx.neoNonHolder && user.id === "neo" && skill.kind === "magic") {
     stat *= c.neo_magic_blade_mult;
   }
@@ -111,18 +111,18 @@ export function calcDamage(
     (user.isEnemy ? 1 : Math.pow(DB.config.enhance.power_mult_per_step, enhanceStage(user.level)));
 
   let defEff = applyBuffStage(target.def, target.buffs["def"] ?? 0);
-  defEff *= weaknessStatMult(target.weaknessFamily, ctx); // 被弾側も全能力0.7倍
+  defEff *= weaknessStatMult(target.weaknessFamily, ctx);
   const base = stat * power - defEff * c.def_factor;
 
   const variance = ctx.fixedVariance ?? ctx.rng.range(c.variance_min, c.variance_max);
   let dmg = base * variance;
 
   const mults = [
-    target.isGuarding ? c.guard_mult : 1.0,
-    ctx.protectedTarget ? c.protected_mult : 1.0,
+    target.isGuarding ? DB.config.guard.damage_mult : 1.0,
+    ctx.protectedTarget ? c.protected_mult : 1.0,      // 庇う軽減×0.5（第4巻5-4-4）
     nightBonus(skill, ctx),
     antiDemon(skill, target),
-    ctx.awakenedLionProc ? ((DB.characters["renny"].ability_battle as any).dmg_mult as number) : 1.0,
+    ctx.awakenedLionProc ? (DB.config.passives.renny_awakened_lion.dmg_mult as number) : 1.0,
     hpScaling(user, skill),
     selfStatusBonus(user, skill),
     poisonTargetBonus(target, skill),
@@ -133,20 +133,43 @@ export function calcDamage(
   return Math.max(c.min_damage, Math.round(dmg));
 }
 
-// 命中判定: 命中率 − 対象回避(バフ込) − 使用者の命中低下 − 天候補正
+// 命中判定（第4巻5-6-1・正本）:
+// 最終命中率 = 技の基礎命中率 + (攻撃側の技量 − 対象の回避力)×0.2 + 命中系デバフ
+// 上限100/下限10。回避は命中判定に内包（失敗=回避）。
 export function calcHit(
-  targetEva: number, targetEvaStage: number, skill: { accuracy: number },
-  userHitDebuff: number, rng: RNG, hitPenalty = 0,
+  userSkl: number, targetEva: number, targetEvaStage: number,
+  accuracy: number, userHitDebuff: number, rng: RNG, hitPenalty = 0,
 ): boolean {
   const h = DB.config.hit;
   const evaEff = applyBuffStage(targetEva, targetEvaStage);
-  let rate = skill.accuracy - evaEff * h.eva_factor - userHitDebuff - hitPenalty;
+  let rate = accuracy + (userSkl - evaEff) * h.skl_eva_factor - userHitDebuff - hitPenalty;
   rate = Math.max(h.min_hit, Math.min(h.max_hit, rate));
   return rng.chance(rate / 100);
 }
 
-// 庇う成功率 = 50 + 技量×0.3 + 信頼×0.3 + 補正、上限95（第16巻20-8/第4巻）
-export function protectRate(skl: number, trust: number, bonus = 0): number {
+// 庇う成功率（第4巻5-4-4・正本）:
+// 50 + 庇う側の技量×0.3 + ペア信頼度×0.3 + 補正。上限95/下限20。
+export function protectRate(skl: number, pairTrust: number, bonus = 0): number {
   const p = DB.config.protect;
-  return Math.min(p.cap, p.base_rate + skl * p.skill_factor + trust * p.trust_factor + bonus);
+  const rate = p.base_rate + skl * p.skill_factor + pairTrust * p.trust_factor + bonus;
+  return Math.max(p.floor, Math.min(p.cap, rate));
+}
+
+// 逃走成功率（第4巻5-4-6）: 50+(味方Lv平均−敵Lv平均)×3。上限95/下限10。
+export function fleeRate(allyAvgLv: number, enemyAvgLv: number): number {
+  const b = DB.config.battle;
+  const rate = b.flee_base_rate + (allyAvgLv - enemyAvgLv) * b.flee_lv_diff_coef;
+  return Math.max(b.flee_floor, Math.min(b.flee_cap, rate));
+}
+
+// 手なずけ成功率（第4巻5-4-7）: 40+技量×0.3。上限90。
+export function tameRate(skl: number): number {
+  const t = DB.config.tame;
+  return Math.min(t.cap, t.base + skl * t.skill_factor);
+}
+
+// 説得成功率（第4巻5-9）: 30+ペア信頼度×0.5（+選択肢15）
+export function persuadeRate(pairTrust: number, dialogBonus = false): number {
+  const p = DB.config.persuade;
+  return p.base + pairTrust * p.trust_factor + (dialogBonus ? p.dialog_bonus : 0);
 }

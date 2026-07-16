@@ -387,6 +387,7 @@ function renderBase(): void {
       log(`${name}は不穏な夢に呑まれていく——夢魔との戦いだ！`, true);
       nightBattle = { kind: "dream", dreamer: ev.dreamer };
       battle = gm.startDreamBattle(ev.dreamer);
+      for (const line of battle.log.lines) log(line, true);
       pendingCommands = [];
       commandIndex = 0;
       renderPhase();
@@ -611,15 +612,15 @@ function openMemberSelect(enemyIds: string[], isBoss: boolean, bossId?: string):
   back.className = "modal-back";
   const memberBtns = active.map((c) => {
     const isHolder = c.id === gm.gs.holder;
-    return `<button class="small mem-btn ${isHolder ? "selected" : ""}" data-id="${c.id}" ${isHolder ? "disabled" : ""}>
+    return `<button class="small mem-btn ${isHolder ? "selected" : ""}" data-id="${c.id}">
       ${isHolder ? "🌱" : ""}${DB.characters[c.id].name} Lv${c.level}</button>`;
   }).join(" ");
   back.innerHTML = `<div class="modal"><h2>⚔️ ${enemyNames}が現れた！</h2>
-    <p>戦闘に参加するメンバーを選べ（最大${DB.config.BATTLE_MEMBERS_MAX}人・保持者は必ず参加）</p>
+    <p>戦闘に参加するメンバーを選べ（最大${DB.config.BATTLE_MEMBERS_MAX}人・保持者の参加は任意）</p>
     <div class="row" style="margin-top:10px">${memberBtns}</div>
     <div class="modal-actions"><button id="battle-start">戦闘開始</button></div></div>`;
   document.body.appendChild(back);
-  back.querySelectorAll(".mem-btn:not([disabled])").forEach((b) => {
+  back.querySelectorAll(".mem-btn").forEach((b) => {
     (b as HTMLElement).onclick = () => {
       const id = (b as HTMLElement).dataset.id!;
       if (battleMembers.includes(id)) {
@@ -632,8 +633,10 @@ function openMemberSelect(enemyIds: string[], isBoss: boolean, bossId?: string):
     };
   });
   (back.querySelector("#battle-start") as HTMLElement).onclick = () => {
+    if (battleMembers.length === 0) return;
     back.remove();
     battle = gm.startBattle(enemyIds, battleMembers, isBoss, bossId);
+    for (const line of battle.log.lines) log(line, true);
     pendingCommands = [];
     commandIndex = 0;
     renderPhase();
@@ -646,7 +649,7 @@ let commandIndex = 0;
 function renderBattle(): void {
   if (!battle) return;
   const b = battle;
-  const actors = b.allies.filter((a) => !a.state.downed);
+  const actors = b.allies.filter((a) => !a.state.downed && !(a as any).betrayed);
   const actor = actors[commandIndex];
 
   const allyCards = b.allies.map((a) => {
@@ -678,6 +681,7 @@ function renderBattle(): void {
       const names: Record<string, string> = {
         attack: "⚔️ 攻撃", skill: "✨ 技", guard: "🛡️ 防御",
         protect: "🤝 庇う", item: "🎒 アイテム", flee: "🏃 逃げる",
+        tame: "🐾 手なずける", persuade: "💬 説得",
       };
       return `<button class="small cmd-btn" data-cmd="${c}">${names[c]}</button>`;
     }).join(" ");
@@ -706,7 +710,7 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
   const pushAndNext = (cmd: Command) => {
     pendingCommands.push(cmd);
     commandIndex++;
-    const actors = b.allies.filter((a) => !a.state.downed);
+    const actors = b.allies.filter((a) => !a.state.downed && !(a as any).betrayed);
     if (commandIndex >= actors.length) {
       execBattleTurn();
     } else {
@@ -718,8 +722,31 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
     case "guard": case "flee":
       pushAndNext({ kind, actorId: actor.id });
       return;
+    case "tame": {
+      const beasts = b.enemies.map((e, i) =>
+        e.alive && !e.tamedTurns && e.def.family === "beast" && !e.def.boss
+          ? `<button class="small t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
+      cmdBar.innerHTML = `<b>どの獣を手なずける？</b> ${beasts} <button class="small" id="tm-back">戻る</button>`;
+      ($("#tm-back")).onclick = () => renderBattle();
+      cmdBar.querySelectorAll(".t-btn").forEach((t) => {
+        (t as HTMLElement).onclick = () =>
+          pushAndNext({ kind, actorId: actor.id, targetEnemyIndex: Number((t as HTMLElement).dataset.i) });
+      });
+      return;
+    }
+    case "persuade": {
+      const betrayed = b.allies.filter((a) => (a as any).betrayed).map((a) =>
+        `<button class="small p-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
+      cmdBar.innerHTML = `<b>誰を説得する？</b> ${betrayed} <button class="small" id="ps-back">戻る</button>`;
+      ($("#ps-back")).onclick = () => renderBattle();
+      cmdBar.querySelectorAll(".p-btn").forEach((t) => {
+        (t as HTMLElement).onclick = () =>
+          pushAndNext({ kind, actorId: actor.id, targetAllyId: (t as HTMLElement).dataset.id });
+      });
+      return;
+    }
     case "attack": {
-      const targets = b.enemies.map((e, i) => e.alive
+      const targets = b.enemies.map((e, i) => e.alive && !e.tamedTurns
         ? `<button class="small t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
       cmdBar.innerHTML = `<b>どの敵を攻撃？</b> ${targets}`;
       cmdBar.querySelectorAll(".t-btn").forEach((t) => {
@@ -753,12 +780,22 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
                 pushAndNext({ kind, actorId: actor.id, skillId: sid, targetAllyId: (ab as HTMLElement).dataset.id });
             });
           } else {
-            const targets = b.enemies.map((e, i) => e.alive
+            const targets = b.enemies.map((e, i) => e.alive && !e.tamedTurns
               ? `<button class="small t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
-            cmdBar.innerHTML = `<b>どの敵に？</b> ${targets}`;
+            // 光属性技は裏切り味方への浄化にも使える（第4巻5-9）
+            const isLight = s.effects.some((e2) => e2.type === "anti_demon");
+            const betrayedBtns = isLight
+              ? b.allies.filter((a) => (a as any).betrayed).map((a) =>
+                `<button class="small bt-btn" data-id="${a.state.id}">✨${DB.characters[a.state.id].name}を浄化</button>`).join(" ")
+              : "";
+            cmdBar.innerHTML = `<b>どの敵に？</b> ${targets} ${betrayedBtns}`;
             cmdBar.querySelectorAll(".t-btn").forEach((tb) => {
               (tb as HTMLElement).onclick = () =>
                 pushAndNext({ kind, actorId: actor.id, skillId: sid, targetEnemyIndex: Number((tb as HTMLElement).dataset.i) });
+            });
+            cmdBar.querySelectorAll(".bt-btn").forEach((tb) => {
+              (tb as HTMLElement).onclick = () =>
+                pushAndNext({ kind, actorId: actor.id, skillId: sid, targetAllyId: (tb as HTMLElement).dataset.id });
             });
           }
         };
@@ -788,8 +825,8 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
       cmdBar.querySelectorAll(".i-btn").forEach((t) => {
         (t as HTMLElement).onclick = () => {
           const itemId = (t as HTMLElement).dataset.id!;
-          const allies = b.allies.map((a) =>
-            `<button class="small at-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}${a.state.downed ? "(戦闘不能)" : ""}</button>`).join(" ");
+          const allies = b.allies.filter((a) => !a.state.downed).map((a) =>
+            `<button class="small at-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
           cmdBar.innerHTML = `<b>誰に使う？</b> ${allies}`;
           cmdBar.querySelectorAll(".at-btn").forEach((ab) => {
             (ab as HTMLElement).onclick = () => {
@@ -892,6 +929,7 @@ function openNightRaidSelect(): void {
     back.remove();
     nightBattle = { kind: "raid" };
     battle = gm.startNightRaidBattle(battleMembers);
+    for (const line of battle.log.lines) log(line, true);
     pendingCommands = [];
     commandIndex = 0;
     renderPhase();

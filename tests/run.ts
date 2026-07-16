@@ -2,7 +2,8 @@
 
 import { DB, validateData } from "../src/dataLoader.js";
 import { GameManager } from "../src/core/gameManager.js";
-import { protectRate, applyBuffStage } from "../src/core/battle/damageCalc.js";
+import { protectRate, applyBuffStage, calcHit, fleeRate, tameRate, persuadeRate } from "../src/core/battle/damageCalc.js";
+import { RNG } from "../src/core/rng.js";
 import { scaleEnemy } from "../src/core/battle/battleManager.js";
 import {
   statAtLevel, enhanceStage, enhancedSkill, expToNext, skillsForCharacter,
@@ -316,10 +317,11 @@ test("[戦闘] HP0→終了時死亡確定、保持者は即GO", () => {
   assertEq(gm.gs.gameOver, "holder_death", "保持者死亡");
 });
 
-test("[戦闘] 庇う成功率式・上限95", () => {
+test("[戦闘] 庇う成功率式（第4巻5-4-4）: 上限95/下限20", () => {
   assertEq(protectRate(50, 50), 80, "50+15+15");
-  assertEq(protectRate(999, 999), 95, "上限");
+  assertEq(protectRate(999, 999), 95, "上限95");
   assertEq(protectRate(0, 0, 10), 60, "補正");
+  assertEq(protectRate(0, 0, -100), 20, "下限20");
 });
 
 test("[戦闘] 誘拐=島側海賊の戦闘技・戦闘不能者のみ・保持者誘拐GO", () => {
@@ -470,7 +472,8 @@ test("[状態] ジンパチは大火傷無効（第8巻10-1）", () => {
   gm.gs.location = "volcano";
   const b = gm.startBattle(["fireball"], ["renny", "jinpachi"]);
   // 直接効果適用経路を検証
-  (b as any).applyStatusToAlly(gm.gs.party["jinpachi"], { type: "burn", chance: 1.0 }, "ジンパチ");
+  const jinAlly = b.allies.find((a) => a.state.id === "jinpachi")!;
+  (b as any).applyStatusToAlly(jinAlly, { type: "burn", chance: 1.0 });
   assertEq(gm.gs.party["jinpachi"].status.burn, undefined, "無効");
 });
 
@@ -784,6 +787,274 @@ test("M2-T11: 疫病の重症化率（3日目≈20%・統計検証）", () => {
   }
   const rate = severeAt3 / TRIALS;
   assert(Math.abs(rate - 0.20) < 0.03, `3日目重症化率 実測=${rate.toFixed(3)} (設計0.20)`);
+});
+
+console.log("[M3] 第4巻・戦闘正本仕様");
+
+test("[命中] 最終命中率 = 基礎 + (技量−回避)×0.2、上限100/下限10（5-6-1）", () => {
+  // 命中50/技量0/回避200 → 50-40=10(下限)。chance(0.10)を確定発生させるためRNG固定
+  let hits = 0;
+  const trials = 20000;
+  const rng = new RNG(1);
+  for (let i = 0; i < trials; i++) {
+    if (calcHit(50, 30, 0, 90, 0, rng, 0)) hits++; // 90+(50-30)*0.2=94
+  }
+  assertClose(hits / trials, 0.94, 0.01, "94%");
+  // 下限10
+  let low = 0;
+  const rng2 = new RNG(2);
+  for (let i = 0; i < trials; i++) {
+    if (calcHit(0, 500, 0, 50, 0, rng2, 0)) low++;
+  }
+  assertClose(low / trials, 0.10, 0.01, "下限10%");
+});
+
+test("[逃走] 50+(Lv差)×3、上限95/下限10（5-4-6）", () => {
+  assertEq(fleeRate(10, 10), 50, "同Lv50");
+  assertEq(fleeRate(20, 10), 80, "+10Lv=80");
+  assertEq(fleeRate(99, 1), 95, "上限");
+  assertEq(fleeRate(1, 99), 10, "下限");
+});
+
+test("[手なずけ] 40+技量×0.3、上限90（5-4-7）", () => {
+  assertEq(tameRate(100), 70, "40+30");
+  assertEq(tameRate(300), 90, "上限90");
+});
+
+test("[説得] 30+ペア信頼×0.5（5-9）", () => {
+  assertEq(persuadeRate(60), 60, "30+30");
+  assertEq(persuadeRate(60, true), 75, "+選択肢15");
+});
+
+test("[戦闘] 保持者は参加しなくてもよい（5-2-1）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["boar"], ["geru", "neo"]); // 保持者レニィ不参加
+  assertEq(b.allies.length, 2, "2人で出撃");
+  assert(b.availableCommands("geru").includes("attack"), "通常コマンド");
+});
+
+test("[戦闘] 保持者が戦闘不能になった瞬間に即GO（5-2-3・終了を待たない）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["bear", "bear"], ["renny", "geru"]);
+  // レニィを瀕死にして熊の攻撃で落とす
+  gm.gs.party["renny"].hp = 1;
+  let out = "ongoing";
+  for (let i = 0; i < 30 && out === "ongoing"; i++) {
+    out = b.executeTurn([
+      { kind: "guard", actorId: "renny" },
+      { kind: "guard", actorId: "geru" },
+    ]);
+    gm.gs.party["geru"].hp = gm.gs.party["geru"].maxHp; // ゲルは維持
+    gm.gs.party["geru"].downed = false;
+    if (out !== "ongoing") break;
+    gm.gs.party["renny"].hp = 1; // 命中するまで瀕死維持
+  }
+  assertEq(out, "gameover", "即GO");
+  const r = gm.settleBattle();
+  assertEq(r.goReason, "holder_death", "GO1");
+});
+
+test("[戦闘] 防御コマンドでターン終了時SP+5（5-4-3）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["boar"], ["renny", "geru"]);
+  gm.gs.party["renny"].sp = 0;
+  b.executeTurn([
+    { kind: "guard", actorId: "renny" },
+    { kind: "guard", actorId: "geru" },
+  ]);
+  assert(gm.gs.party["renny"].sp >= 5, `防御でSP+5 (sp=${gm.gs.party["renny"].sp})`);
+});
+
+test("[戦闘] 大出血中は攻撃コマンド不可（5-7）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  gm.gs.party["geru"].status.bleed = 3;
+  const b = gm.startBattle(["boar"], ["renny", "geru"]);
+  const cmds = b.availableCommands("geru");
+  assert(!cmds.includes("attack"), "攻撃不可");
+  assert(cmds.includes("skill"), "技は可");
+});
+
+test("[戦闘] 味方のスリップ: 毒5%/大出血8%（5-7）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["boar"], ["renny", "geru", "muni"]);
+  b.enemies[0].hp = 999999; b.enemies[0].maxHp = 999999;
+  const geru = gm.gs.party["geru"];
+  const muni = gm.gs.party["muni"];
+  geru.status.poison = 7;
+  muni.status.bleed = 3;
+  const gHp = geru.hp, mHp = muni.hp;
+  b.executeTurn([
+    { kind: "guard", actorId: "renny" },
+    { kind: "guard", actorId: "geru" },
+    { kind: "guard", actorId: "muni" },
+  ]);
+  const gLoss = gHp - geru.hp;
+  const mLoss = mHp - muni.hp;
+  // 敵の攻撃分があるため「最低でもスリップ分は減っている」を確認
+  assert(gLoss >= Math.round(geru.maxHp * 0.05), `毒5%以上 (${gLoss})`);
+  assert(mLoss >= Math.round(muni.maxHp * 0.08), `出血8%以上 (${mLoss})`);
+});
+
+test("[戦闘] 手なずける: 獣族を3ターン味方化→野生に帰る（5-4-7）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42); // ジンパチ非保持者
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["boar", "bear"], ["renny", "jinpachi"]);
+  assert(b.availableCommands("jinpachi").includes("tame"), "手なずけるコマンド");
+  // 成功を強制（tameRate→100%化はできないので直接付与して挙動検証）
+  b.enemies[0].tamedTurns = 3;
+  b.enemies[1].hp = 999999; b.enemies[1].maxHp = 999999;
+  // 手なずけ中は勝利判定で敵扱いされない
+  b.enemies[1].alive = false;
+  assertEq(b.finish(), "victory", "手なずけ個体のみ残存→勝利");
+});
+
+test("[戦闘] 取り憑き→裏切りユニット→説得で復帰（5-9）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  for (const key of Object.keys(gm.gs.trust)) gm.gs.trust[key] = 100; // 説得を確実に
+  const skill = DB.enemies["demon"].skills.find((s) => s.name === "取り憑き")!;
+  const orig = skill.effects[0].chance;
+  skill.effects[0].chance = 5.0; // 抵抗補正込みでも確定
+  try {
+    const b = gm.startBattle(["demon"], ["geru", "neo"]); // 保持者不参加（保持者GOを避ける）
+    let betrayedId: string | null = null;
+    for (let i = 0; i < 12 && !betrayedId; i++) {
+      b.executeTurn([
+        { kind: "guard", actorId: "geru" },
+        { kind: "guard", actorId: "neo" },
+      ].filter((c) => {
+        const a = b.allies.find((x) => x.state.id === c.actorId) as any;
+        return a && !a.betrayed && !a.state.downed;
+      }) as any);
+      for (const a of b.allies) { if (!(a as any).betrayed) { a.state.hp = a.state.maxHp; a.state.downed = false; } }
+      const bt = b.allies.find((a) => (a as any).betrayed);
+      if (bt) betrayedId = bt.state.id;
+    }
+    assert(betrayedId !== null, "裏切り発生");
+    // 説得（信頼100 → 30+50=80%。成功するまで試行）
+    const persuader = b.allies.find((a) => a.state.id !== betrayedId)!;
+    let freed = false;
+    for (let i = 0; i < 20 && !freed; i++) {
+      b.executeTurn([{ kind: "persuade", actorId: persuader.state.id, targetAllyId: betrayedId! }]);
+      for (const a of b.allies) { if (!(a as any).betrayed) { a.state.hp = a.state.maxHp; a.state.downed = false; } }
+      freed = !(b.allies.find((a) => a.state.id === betrayedId) as any).betrayed;
+    }
+    assert(freed, "説得で復帰");
+  } finally {
+    skill.effects[0].chance = orig;
+  }
+});
+
+test("[戦闘] 敵の一撃必殺は保持者に無効（5-6-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["tiger"], ["renny"]);
+  // 直接検証: crit_bonus効果は保持者を対象外とするロジック
+  // → 30ターン喉狙いを受け続けても一撃必殺での戦闘不能は起きない
+  //   （ダメージ戦闘不能は起こりうるのでHPを毎回全快に）
+  let critDown = false;
+  for (let i = 0; i < 30; i++) {
+    const before = b.log.lines.length;
+    const out = b.executeTurn([{ kind: "guard", actorId: "renny" }]);
+    const newLines = b.log.lines.slice(before).join("");
+    if (newLines.includes("急所に命中")) critDown = true;
+    gm.gs.party["renny"].hp = gm.gs.party["renny"].maxHp;
+    gm.gs.party["renny"].downed = false;
+    (b as any).outcome = "ongoing";
+    (b as any).holderLost = null;
+    if (out === "victory") break;
+  }
+  assert(!critDown, "保持者に急所なし");
+});
+
+test("[戦闘] 水の女神の救済: 引き込み即死を1戦闘1度だけ無効（5-6-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("neo", 42); // 非レニィ保持者
+  gm.gs.location = "shallows";
+  gm.gs.tide = "high";
+  // 供物期限内 → waterGraceActive
+  const b = gm.startBattle(["shark"], ["geru", "muni"]); // レニィ不在
+  const pullSkill = DB.enemies["shark"].skills.find((s) => s.name.includes("引き込む"))!;
+  // 直接実行して救済を検証
+  (b as any).execEnemySkill(b.enemies[0], pullSkill);
+  const logs1 = b.log.lines.join("");
+  // 命中は55%なので、外れた場合も考慮して救済発生まで繰り返す
+  let saved = logs1.includes("水の女神の加護");
+  let died = false;
+  for (let i = 0; i < 40 && !saved && !died; i++) {
+    const before = b.log.lines.length;
+    (b as any).execEnemySkill(b.enemies[0], pullSkill);
+    const t = b.log.lines.slice(before).join("");
+    if (t.includes("水の女神の加護")) saved = true;
+    if (t.includes("引きずり込まれた")) died = true;
+  }
+  assert(saved && !died, "初回は救済される");
+  // 2度目は死亡する（1戦1回）
+  let secondDeath = false;
+  for (let i = 0; i < 60 && !secondDeath; i++) {
+    const before = b.log.lines.length;
+    (b as any).execEnemySkill(b.enemies[0], pullSkill);
+    if (b.log.lines.slice(before).join("").includes("引きずり込まれた")) secondDeath = true;
+  }
+  assert(secondDeath, "2度目は救済されない");
+});
+
+test("[戦闘] EXP: 控えの生存メンバーに30%（5-11-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["giant_mosquito"], ["renny", "geru"]);
+  const hyuExpBefore = gm.gs.party["hyu"].exp;
+  let out = "ongoing";
+  for (let i = 0; i < 40 && out === "ongoing"; i++) {
+    out = b.executeTurn([
+      { kind: "guard", actorId: "renny" },
+      { kind: "attack", actorId: "geru", targetEnemyIndex: 0 },
+    ]);
+  }
+  assertEq(out, "victory", "勝利");
+  const r = gm.settleBattle();
+  const expected = Math.round(r.expGained * 0.3);
+  assertEq(gm.gs.party["hyu"].exp - hyuExpBefore, expected, "控え30%");
+});
+
+test("[戦闘] 庇う成功で方向付きカウンタ+信頼+3（5-4-4/5-13-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  const before = gm.trust.pair("geru", "renny");
+  gm.trust.onProtectSuccess("geru", "renny");
+  assertEq(gm.gs.protectCounts["geru>renny"], 1, "方向付き");
+  assertEq(gm.trust.pair("geru", "renny"), before + 3, "+3");
+  gm.trust.onProtectSuccess("geru", "renny");
+  const special = gm.trust.onProtectSuccess("geru", "renny");
+  assert(special !== null && special.includes("protect_special"), "3回で特別シナリオ");
+});
+
+test("[戦闘] 勝利時SP回復=最大の10%（5-11-1）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "grassland";
+  const b = gm.startBattle(["giant_mosquito"], ["renny", "geru"]);
+  b.enemies[0].hp = 0;
+  b.enemies[0].alive = false;
+  gm.gs.party["geru"].sp = 0;
+  b.finish();
+  gm.settleBattle();
+  const geru = gm.gs.party["geru"];
+  assert(geru.sp >= Math.round(geru.maxSp * 0.10), `SP10%回復 (${geru.sp})`);
 });
 
 console.log("[M3.5] 夜イベント戦闘（M2フック接続）");

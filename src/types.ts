@@ -165,6 +165,7 @@ export interface EnemySkill {
 export interface EnemyState {
   id: string;
   defId: string;
+  tamedTurns?: number;          // 手なずけ残ターン(第4巻5-4-7)
   def: EnemyDef;
   level: number;
   hp: number;
@@ -277,6 +278,7 @@ export interface GameState {
     sharkKills: number; comaTotal: number;
   };
   achievements: string[];
+  protectCounts: Record<string, number>;   // 庇う成功回数 "from>to"（第4巻5-4-4）
   gameOver: GOReason | null;
   rngSeed: number;
   version: number;

@@ -26,11 +26,8 @@ export type GamePhase =
 
 const HOLDER_CANDIDATES = ["renny", "hyu", "jinpachi", "muni", "geru", "neo"];
 
-// エリア別敵Lv補正（第4巻5-10-3未受領のため【AI提案・要差替】）
-const AREA_LV_MOD: Record<string, number> = {
-  forest_lake: 0, grassland: 0, beach: 1, wasteland: 2,
-  volcano: 3, shallows: 2, shrine_islet: 2, pirate_ship: 2, dream: 0,
-};
+// エリア別敵Lv補正（第4巻5-10-3・正本: 森0/草原+1/砂浜+1/荒野+2/登山道+2/浅瀬+3/海賊船+3）
+const AREA_LV_MOD: Record<string, number> = DB.config.area_lv_mod;
 
 export class GameManager {
   gs!: GameState;
@@ -79,6 +76,7 @@ export class GameManager {
         revived: 0, protectSuccess: 0, sharkKills: 0, comaTotal: 0,
       },
       achievements: [],
+      protectCounts: {},
       gameOver: null,
       rngSeed,
       version: 2,
@@ -316,12 +314,11 @@ export class GameManager {
 
   // ============ 戦闘 ============
   startBattle(enemyIds: string[], memberIds: string[], isBoss = false, bossId?: string): BattleManager {
+    // 保持者は選択しなくてもよい（第4巻5-2-1）
     const members = memberIds
       .map((id) => this.gs.party[id])
       .filter((c) => c && c.exclusion === "none" && c.comaDaysLeft === 0);
-    if (!members.some((m) => m.id === this.gs.holder)) {
-      throw new Error("holder must join the battle party");
-    }
+    if (members.length === 0) throw new Error("no battle members");
     const ctx: BattleContext = {
       location: this.gs.location,
       slot: this.gs.slot,
@@ -329,10 +326,12 @@ export class GameManager {
       isBoss, bossId,
       weatherHitPenalty: (this.weather.effects(this.gs.weather).hit_penalty as number) ?? 0,
       areaLvMod: AREA_LV_MOD[this.gs.location] ?? 0,
+      waterGraceActive: this.tribute.remainingDays("water") >= 0,
     };
     this.currentBattle = new BattleManager(
       enemyIds, members, this.gs.holder, ctx, this.rng,
-      (id) => this.trust.avgOf(id),
+      (a, b) => this.trust.pair(a, b),
+      (id) => this.trust.totalOf(id),
     );
     this.phase = "battle";
     return this.currentBattle;
@@ -345,6 +344,28 @@ export class GameManager {
 
     this.gs.stats.sharkKills += result.sharkKills;
 
+    const tb = DB.config.trust_battle;
+    const ids = b.allies.map((a) => a.state.id);
+    const allPairs = (amount: number, reason: string) => {
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          this.trust.add(ids[i], ids[j], amount, reason);
+        }
+      }
+    };
+    const demonBattle = b.enemies.some((e) => e.def.family === "demon");
+
+    // 庇う成功: 当該ペア+3・方向付きカウンタ（第4巻5-4-4/5-13-2）
+    for (const [from, to] of result.protectSuccessPairs) {
+      this.trust.onProtectSuccess(from, to);
+    }
+    // 説得成功: 当該ペア+5（第4巻5-9）※説得者記録は簡略化し復帰者と保持者のペア
+    for (const pid of result.persuaded) {
+      this.trust.add(this.gs.holder, pid, tb.persuade_success, "persuade");
+    }
+    // 味方の死亡発生: 全ペア−2（第4巻5-13-2）
+    if (result.deaths.length > 0) allPairs(tb.member_death_all_pairs, "member_death");
+
     if (result.outcome === "victory") {
       this.gs.stats.battlesWon++;
       this.gs.silver += result.silver;
@@ -352,18 +373,15 @@ export class GameManager {
         this.gs.inventory[item] = Math.min(DB.config.gather.stack_max,
           (this.gs.inventory[item] ?? 0) + 1);
       }
-      const ids = b.allies.map((a) => a.state.id);
-      for (let i = 0; i < ids.length; i++) {
-        for (let j = i + 1; j < ids.length; j++) {
-          this.trust.add(ids[i], ids[j], DB.trust.gain.battle_together, "battle_together");
-        }
-      }
-      // 悪魔撃破: 参加者全ペア信頼度+2（第8巻10-7）
-      if (b.enemies.some((e) => e.def.family === "demon")) {
-        for (let i = 0; i < ids.length; i++) {
-          for (let j = i + 1; j < ids.length; j++) {
-            this.trust.add(ids[i], ids[j], DB.config.trust.demon_kill_all_pairs, "demon_kill");
-          }
+      // 勝利: 参加者全ペア+1／悪魔戦は+2（第4巻5-13-2/5-9）
+      allPairs(demonBattle ? tb.demon_win_all_pairs : tb.victory_all_pairs, "victory");
+      // 控えの生存メンバーに30%（第4巻5-11-2）
+      const reserveExp = Math.round(result.expGained * DB.config.exp.reserve_ratio);
+      if (reserveExp > 0) {
+        for (const c of Object.values(this.gs.party)) {
+          if (ids.includes(c.id)) continue;
+          if (c.exclusion !== "none" || c.comaDaysLeft > 0) continue;
+          b.grantExp(c, reserveExp);
         }
       }
       // ボス撃破処理
@@ -382,6 +400,15 @@ export class GameManager {
           }
         }
       }
+    }
+
+    // 取り憑きを許して敗走: 全ペア−3（第4巻5-9）
+    if (result.outcome !== "victory" && demonBattle && result.possessed.length > 0) {
+      allPairs(tb.demon_lose_all_pairs, "demon_lose");
+    }
+    // 敗北: 控えに生存者がいれば全滅ではない→拠点へ強制送還（第4巻5-13-3）
+    if (result.outcome === "defeat" && !result.goReason) {
+      this.gs.location = "base";
     }
 
     // 溺水（第0巻矛盾#4）
@@ -482,7 +509,9 @@ export class GameManager {
       ["nightmare"], [dreamer],
       // 夢の主が保持者でない場合、保持者制限は夢の主に適用されない
       dreamerId === this.gs.holder ? this.gs.holder : "__none__",
-      ctx, this.rng, (id) => this.trust.avgOf(id),
+      ctx, this.rng,
+      (a, b) => this.trust.pair(a, b),
+      (id) => this.trust.totalOf(id),
     );
     this.phase = "battle";
     return this.currentBattle;
@@ -513,12 +542,11 @@ export class GameManager {
     const members = memberIds
       .map((id) => this.gs.party[id])
       .filter((c) => c && c.exclusion === "none" && c.comaDaysLeft === 0);
-    if (!members.some((m) => m.id === this.gs.holder)) {
-      throw new Error("holder must join the battle party");
-    }
+    if (members.length === 0) throw new Error("no battle members");
     this.currentBattle = new BattleManager(
       Array(count).fill("demon"), members, this.gs.holder, ctx, this.rng,
-      (id) => this.trust.avgOf(id),
+      (a, b) => this.trust.pair(a, b),
+      (id) => this.trust.totalOf(id),
     );
     this.phase = "battle";
     return this.currentBattle;
