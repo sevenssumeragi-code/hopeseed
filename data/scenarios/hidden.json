@@ -1,14 +1,138 @@
 {
-  "_source": "第11巻(隠し)未受領のため【AI提案・要差替】。",
+  "_source": "第11巻14-4（正本）: 隠しイベント12本。発生条件・報酬は正本準拠、本文は概要から展開した【AI提案】。湖の女神加入イベントは第2巻3-7未受領のため条件「保持者⇔5人の信頼度合計350以上ほか」（第9巻12-4）のみ実装【AI提案・要差替】。",
   "events": [
     {
       "id": "hidden_goddess",
-      "trigger": {"day_min": 60, "location": "shrine_islet", "flags_all": []},
+      "title": "湖の女神の加入",
+      "trigger": { "day_min": 240, "location": "shrine_islet", "holder_trust_sum_min": 350 },
       "requires_alive": [],
       "variants": [
-        {"key":"A","cond":"trust_avg_holder>=50","text":"祠の奥で湖の女神が微笑む。『あなたたちの絆、確かに見届けました』——女神が仲間に加わった！"}
+        { "key": "A", "cond": "default", "text": "湖の女神「見届けるだけのつもりでした。でも……わたくしも、あなたたちと歩きたい」——湖の女神が仲間に加わった！" }
       ],
       "sets_flags": ["goddess_joined"]
+    },
+    {
+      "id": "hidden_starry_night",
+      "title": "星降る夜",
+      "trigger": { "day_min": 200, "slot": ["night"], "weather": "clear", "all_pairs_avg_min": 80, "location": "base" },
+      "requires_alive": ["renny", "jinpachi", "hyu", "muni", "geru", "neo"],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "夜空が、降ってきた。\n数え切れない流星が島の上を流れていく。誰も口をきかなかった。ムニが小さく「きれい」と言い、それきり、また静寂。\n6人と、6つの願いごと。その全部が、たぶん同じだった。（全ペアの絆+3）" }
+      ],
+      "rewards": { "trust_all_pairs": 3 },
+      "sets_flags": ["hidden_starry_night_done", "ed_flag_starry_night"]
+    },
+    {
+      "id": "hidden_muni_birthday",
+      "title": "ムニのたんじょうび",
+      "trigger": { "day_exact": 180, "location": "base" },
+      "requires_alive": ["muni"],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "今日はムニの6歳の誕生日。\n貝殻の冠（ヒュウ作）、木彫りのライオン（ジンパチ作）、甘い薬草飴（ゲル作）、子守唄（ネオ・照れながら）、ふかふかの葉っぱベッド（レニィ作）。\nムニ「……ムニ、しあわせもの、なの」\n（ムニと全員の絆が深まった）" }
+      ],
+      "rewards": { "trust_char_all": { "char": "muni", "amount": 5 } },
+      "sets_flags": ["hidden_muni_birthday_done"]
+    },
+    {
+      "id": "hidden_goddess_sisters",
+      "title": "炎と水の姉妹",
+      "trigger": { "tribute_total_min": 12 },
+      "requires_alive": [],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "供物を絶やさぬ子らに、女神たちが珍しく昔語りをした。\n炎の女神「わらわとあれは、もとはひとつの火山と海。喧嘩別れした姉妹よ」\n水の女神「姉さんが短気なのがいけないのです」\n炎の女神「なんじゃと？」\n——仲裁したのはムニだった。（以後、両女神の加護が発動しやすくなる: 加護率+10%）" }
+      ],
+      "sets_flags": ["hidden_sisters_done", "grace_boost"]
+    },
+    {
+      "id": "hidden_lake_banquet",
+      "title": "湖面の宴",
+      "trigger": { "flags_all": ["goddess_joined"], "slot": ["night"], "weather": "clear", "location": "base" },
+      "requires_alive": [],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "女神を囲んで、初めての宴。\n湖の女神「人間は、火を囲むと笑うのですね。……メモしておきましょう」\nジンパチ「女神さまってメモすんのかよ」\n湖の女神「千年ぶりの発見ですもの」\n（女神の人間観察は、どこまでも微笑ましかった）" }
+      ],
+      "sets_flags": ["hidden_lake_banquet_done"]
+    },
+    {
+      "id": "hidden_group_photo",
+      "title": "幻の集合写真",
+      "trigger": { "flags_all": ["talk_group3_3_done"], "location": "beach" },
+      "requires_alive": ["renny", "jinpachi", "hyu"],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "砂浜の漂着物に、防水ケースが混じっていた。中には——修学旅行のカメラ。\n奇跡的に残っていた一枚に、三人が写っていた。別々のグループにいたはずの三人が、偶然、同じフレームの端と端に。\nヒュウ「……運命は、案外早くから伏線を張っていたようですね」" }
+      ],
+      "sets_flags": ["hidden_group_photo_done"]
+    },
+    {
+      "id": "hidden_fan_fiction",
+      "title": "二次創作のはなし",
+      "trigger": { "pair_trust": { "pair": "geru:hyu", "min": 100 }, "weather": "rain", "location": "base" },
+      "requires_alive": ["geru", "hyu"],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "雨の日の調合室。ゲルがぽつりと、昔「好きだったもの」の話をした。\nゲル「……私はあれで、人を傷つけた。だから、好きだったこと自体、間違いだったのかと」\nヒュウ「作品は無罪です。あなたの愛も」\nゲル「……っ」\nヒュウ「罪があるとすれば使い方だけ。愛したことは、誇っていい」" }
+      ],
+      "sets_flags": ["hidden_fan_fiction_done"]
+    },
+    {
+      "id": "hidden_king_sword",
+      "title": "王剣の稽古",
+      "trigger": { "pair_trust": { "pair": "jinpachi:neo", "min": 100 }, "holder_not": "neo", "slot": ["morning"], "location": "base" },
+      "requires_alive": ["jinpachi", "neo"],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "早朝。人目を忍んで、二人の稽古が始まった。\nネオ「我が王家秘伝の剣筋、見て盗めるものなら盗んでみせろ」\nジンパチ「はっ、上等だ！」\n百合先、ジンパチの拳が王家の剣筋をなぞった。\nネオ「……末恐ろしい男だ」（ジンパチの技「覇王撃」の命中+5%）" }
+      ],
+      "sets_flags": ["hidden_king_sword_done", "haou_geki_acc_up"]
+    },
+    {
+      "id": "hidden_bride",
+      "title": "「およめさんになる！」",
+      "trigger": { "pair_trust": { "pair": "geru:muni", "min": 100 }, "location": "base" },
+      "requires_alive": ["geru", "muni"],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "ムニ「ムニね、おおきくなったら、ゲルおねえちゃんのおよめさんになる！」\nゲル「ぶっ……！？」\nジンパチ「おいムニ、嫁ってのはだな——」\nヒュウ「性別的には婿では？　いや、そもそも……」\nネオ「王権により祝福する！」\nゲル「勝手に祝福するな！！」（拠点は夜まで大混乱だった）" }
+      ],
+      "sets_flags": ["hidden_bride_done"]
+    },
+    {
+      "id": "hidden_dream_reunion",
+      "title": "夢の中の再会",
+      "trigger": { "flags_all": ["nightmare_king_defeated"], "slot": ["night"], "location": "base" },
+      "requires_alive": ["muni"],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "夢魔の王が消えた最初の夜。ムニは夢を見た。\n悪夢ではなかった。ぱぱとままが、あの日のままの笑顔で立っていた。\n「——生きて」\n二つの声がそう言って、朝の光に溶けた。\nムニ「……うん。ムニ、いきるね」\n（それは昏睡ではなく、ただの安眠だった。ムニと全員の絆+3）" }
+      ],
+      "rewards": { "trust_char_all": { "char": "muni", "amount": 3 } },
+      "sets_flags": ["hidden_dream_reunion_done"]
+    },
+    {
+      "id": "hidden_dog_story",
+      "title": "ドグの身の上",
+      "trigger": { "dog_spent_min": 500, "location": "beach" },
+      "requires_alive": [],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "ドグ「……よう、お得意さん。今日は釣りだ、店は休みだよ」\n上客への礼だと言って、商人は身の上を語った。——かつて自分も「攫われた側」だったこと。船倉の暗さと、初めて商品を売った日の光のこと。\nドグ「戦は売らねえ。モノを売る。そう決めた日の話さ」\n（以後、購入価格が割引される: 売値×2.5）" }
+      ],
+      "sets_flags": ["hidden_dog_story_done", "dog_discount"]
+    },
+    {
+      "id": "hidden_holder_night",
+      "title": "保持者の夜",
+      "trigger": { "day_min": 300, "holder_avg_min": 80, "slot": ["night"], "location": "base" },
+      "requires_alive": [],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "300日目を越えた夜。保持者は、仲間ひとりひとりと短い言葉を交わして回った。\n語られたのは謝罪でも激励でもなく、ただの「ありがとう」だった。\n5つの会話が終わる頃、ホープシードは今までで一番強く光っていた。\n（エンディングに特別な分岐が生まれた）" }
+      ],
+      "sets_flags": ["hidden_holder_night_done", "ed_flag_holder_night"]
+    },
+    {
+      "id": "hidden_goddess_monologue",
+      "title": "女神の独白",
+      "trigger": { "day_min": 364, "no_continue": true },
+      "requires_alive": [],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "（誰も見ていない湖面に、女神がひとり佇んでいる）\n湖の女神「……この島は、遠い昔、わたくしたち三姉妹が『希望』を試すために作った揺り籠。\n幾多の漂流者が来て、憎み合い、消えていきました。\nでも、あなたたちは——最後まで、一度も希望を手放さなかった。\n……ありがとう。この言葉は、あなたにだけ」\n（実績『女神の独白』を獲得した）" }
+      ],
+      "sets_flags": ["hidden_goddess_monologue_done", "ach_goddess_monologue"]
     }
   ]
 }

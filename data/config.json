@@ -199,7 +199,8 @@
     "pirate_silver_min": 5,
     "pirate_silver_max": 15,
     "silver_min": 1,
-    "silver_max": 5
+    "silver_max": 5,
+    "buy_mult_discount": 2.5
   },
   "trust": {
     "min": 0,
@@ -210,7 +211,31 @@
       3,
       7,
       15
-    ]
+    ],
+    "pair_talk_thresholds": [
+      20,
+      40,
+      60,
+      80,
+      100
+    ],
+    "group_talk_thresholds": [
+      120,
+      180,
+      240
+    ],
+    "talk5_protect_bonus": 5,
+    "protect_special2_bonus": 5,
+    "protect_special3_damage_cut": 0.1,
+    "betrayal_avoid": {
+      "base": 40,
+      "per_trust": 0.08,
+      "trust_bonus_cap": 40,
+      "choice_correct": 20,
+      "choice_neutral": 10,
+      "choice_wrong": 0
+    },
+    "_source_m6": "第9巻12-4/12-5正本。掛け合い解放閾値・裏切り回避式・第5話/庇う特別の恒久ボーナスは第11巻共通報酬。"
   },
   "ending": {
     "true_ending": {

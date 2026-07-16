@@ -119,6 +119,7 @@ export interface CharacterState {
   atkBuffNextBattle: number;           // 海賊風煮込み
   equippedWeapon: string | null;
   downed: boolean;
+  excludedDays?: number;               // 除外（死亡・誘拐）の放置日数（第9巻12-3-2: 7日ごと−1）
 }
 
 export interface EnemyDef {
@@ -289,7 +290,10 @@ export interface GameState {
     battlesWon: number; cooked: number; built: number; brewed: number;
     revived: number; protectSuccess: number;
     sharkKills: number; comaTotal: number;
+    dogSpent?: number;                     // ドグ商店での累計支払い（第11巻14-4隠し#10）
   };
+  trustDelta?: Record<string, number>;     // その日の信頼度上昇（就寝時の要約表示用・第9巻12-7）
+  continued?: boolean;                     // GOからの再開履歴（第11巻14-4隠し#12: ノーコンティニュー）
   achievements: string[];
   protectCounts: Record<string, number>;   // 庇う成功回数 "from>to"（第4巻5-4-4）
   halfTimeAccrued: boolean;                // 0.5時間帯コストの繰越（第3巻4-0-2）

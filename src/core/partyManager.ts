@@ -2,6 +2,7 @@
 
 import { DB } from "../dataLoader.js";
 import { maxHp, maxSp } from "./stats.js";
+import type { TrustManager } from "./trustManager.js";
 import type { CharacterState, ExclusionKind, GameState } from "../types.js";
 
 export function createCharacterState(id: string, level = 1): CharacterState {
@@ -22,7 +23,7 @@ export function createCharacterState(id: string, level = 1): CharacterState {
 }
 
 export class PartyManager {
-  constructor(private gs: GameState) {}
+  constructor(private gs: GameState, private trust?: TrustManager) {}
 
   getActiveMembers(): CharacterState[] {
     return Object.values(this.gs.party).filter(
@@ -57,6 +58,13 @@ export class PartyManager {
     this.gs.reviveLastDay = this.gs.day;
     this.gs.stats.revived++;
     this.gs.journal?.revives.push({ day: this.gs.day, charId }); // 日誌（第13巻16-2）
+    c.excludedDays = 0;
+    // 蘇生: 復活者⇔他の全員 +5（第9巻12-3-1【AI提案：命の重みの共有】）
+    if (this.trust) {
+      for (const other of Object.keys(this.gs.party)) {
+        if (other !== charId) this.trust.add(charId, other, DB.trust.gain.revive, "revive");
+      }
+    }
     return true;
   }
 

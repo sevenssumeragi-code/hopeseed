@@ -8,6 +8,7 @@ import { TributeManager } from "./tributeManager.js";
 import { StatusEffectManager } from "./statusEffectManager.js";
 import { WeatherManager } from "./weatherManager.js";
 import { EventManager } from "./eventManager.js";
+import { TalkManager } from "./talkManager.js";
 import { CraftManager } from "./craftManager.js";
 import { EndingJudge } from "./endingJudge.js";
 import { AchievementManager } from "./achievementManager.js";
@@ -40,6 +41,7 @@ export class GameManager {
   statusFx!: StatusEffectManager;
   weather = new WeatherManager();
   events!: EventManager;
+  talks!: TalkManager;
   craft!: CraftManager;
   endingJudge!: EndingJudge;
   achievements!: AchievementManager;
@@ -47,6 +49,7 @@ export class GameManager {
 
   currentBattle: BattleManager | null = null;
   lastEndingId: string | null = null;
+  lastBondSummary: string[] = [];   // 就寝時の絆要約（第9巻12-7）
   pendingNightRaid = false;
   private nightEventsResolved = false;
   private nightEventBattle = false;
@@ -90,20 +93,24 @@ export class GameManager {
   }
 
   private bindManagers(): void {
-    this.party = new PartyManager(this.gs);
     this.trust = new TrustManager(this.gs);
+    this.party = new PartyManager(this.gs, this.trust);
     this.tribute = new TributeManager(this.gs);
     this.statusFx = new StatusEffectManager(this.gs, this.rng);
     this.events = new EventManager(this.gs, this.trust);
+    this.talks = new TalkManager(this.gs, this.trust);
     this.craft = new CraftManager(this.gs, this.rng);
     this.endingJudge = new EndingJudge(this.gs, this.party, this.trust, this.events);
     this.achievements = new AchievementManager(this.gs, this.trust);
   }
 
   loadGame(slotId: string): boolean {
+    const wasGameOver = this.phase === "gameover";
     const gs = this.save.loadSlot(slotId);
     if (!gs) return false;
     gs.journal ??= { tributes: [], revives: [], events: [] };
+    gs.stats.dogSpent ??= 0;
+    if (wasGameOver) gs.continued = true; // ノーコンティニュー判定（第11巻14-4 #12）
     this.gs = gs;
     this.rng = new RNG(gs.rngSeed);
     this.bindManagers();
@@ -158,6 +165,8 @@ export class GameManager {
     for (const d of tick.deaths) {
       if (d.charId === this.gs.holder) { this.triggerGameOver("holder_death"); return; }
     }
+    // 放置ペナルティ（第9巻12-3-2: 除外7日ごと−1／飢餓3日以上−2全ペア）
+    this.trust.dailyNeglectTick();
 
     const expired = this.tribute.checkExpiry();
     if (expired) { this.triggerGameOver(expired); return; }
@@ -213,6 +222,8 @@ export class GameManager {
       c.hitDebuff = 0; c.hitDebuffTurns = 0;
       c.protectRateBuff = 0; c.protectRateTurns = 0;
     }
+    // 就寝時の絆要約（第9巻12-7:「AとBの絆が深まった気がする」）
+    this.lastBondSummary = this.trust.consumeDailySummary();
     this.save.autosave(this.gs);
   }
 
@@ -258,6 +269,14 @@ export class GameManager {
       if (c.status.obesity && entry.quality !== "poor") c.status.obesityPlainDays = 0;
     }
     if (special["plague_resist"]) this.gs.flags["plague_resist_today"] = true;
+    // おいしいもの（大成功料理）を分かち合う: 食べた者の全ペア+1（第9巻12-3-1【AI提案】）
+    if (entry.quality === "great" && eaters.length >= 2) {
+      for (let i = 0; i < eaters.length; i++) {
+        for (let j = i + 1; j < eaters.length; j++) {
+          this.trust.add(eaters[i].id, eaters[j].id, DB.trust.gain.great_meal_all, "great_meal");
+        }
+      }
+    }
     return { ok: true, message: msg };
   }
 
@@ -398,7 +417,33 @@ export class GameManager {
   }
 
   // ============ 戦闘 ============
+  // ペア恒久ボーナス（第11巻: 第5話+5%/庇う特別2段+5%/3段=被ダメ−10%）
+  private battlePerks(): { pair: (a: string, b: string) => { protect: number; dmgCut: number }; flag: (k: string) => boolean } {
+    return {
+      pair: (a: string, b: string) => {
+        const key = [a, b].sort().join(":");
+        const t = DB.config.trust;
+        return {
+          protect: (this.gs.flags[`talk5_${key}`] ? t.talk5_protect_bonus : 0)
+            + (this.gs.flags[`pspecial2_${key}_done`] ? t.protect_special2_bonus : 0),
+          dmgCut: this.gs.flags[`protect_special_${key}`] ? t.protect_special3_damage_cut : 0,
+        };
+      },
+      flag: (k: string) => !!this.gs.flags[k],
+    };
+  }
+
+  // 夢魔の王戦「絆の呼び声」: 保持者との信頼度上位2名が自動参戦（第8巻/第9巻12-4）
+  bondCallMembers(): string[] {
+    const others = this.party.getActiveMembers()
+      .filter((c) => c.id !== this.gs.holder)
+      .sort((x, y) => this.trust.pair(this.gs.holder, y.id) - this.trust.pair(this.gs.holder, x.id));
+    return [this.gs.holder, ...others.slice(0, 2).map((c) => c.id)];
+  }
+
   startBattle(enemyIds: string[], memberIds: string[], isBoss = false, bossId?: string): BattleManager {
+    // 夢魔の王: 絆の呼び声で参戦メンバー固定（第8巻）
+    if (bossId === "nightmare_king") memberIds = this.bondCallMembers();
     // 保持者は選択しなくてもよい（第4巻5-2-1）
     const members = memberIds
       .map((id) => this.gs.party[id])
@@ -419,6 +464,7 @@ export class GameManager {
       enemyIds, members, this.gs.holder, ctx, this.rng,
       (a, b) => this.trust.pair(a, b),
       (id) => this.trust.totalOf(id),
+      this.battlePerks(),
     );
     this.phase = "battle";
     return this.currentBattle;
@@ -449,6 +495,14 @@ export class GameManager {
     // 説得成功: 当該ペア+5（第4巻5-9）※説得者記録は簡略化し復帰者と保持者のペア
     for (const pid of result.persuaded) {
       this.trust.add(this.gs.holder, pid, tb.persuade_success, "persuade");
+    }
+    // 裏切りキャラの攻撃: 攻撃した側⇔された側 −1/回（第9巻12-3-2）
+    for (const [atk, tgt] of result.betrayedAttacks) {
+      this.trust.add(atk, tgt, DB.trust.loss.betray_attack, "betray_attack");
+    }
+    // 悪魔に裏切りを許した（取り憑き成立）: 全ペア−3（第9巻12-3-2）
+    if (result.possessionOccurred.length > 0) {
+      this.trust.addAllPairs(DB.trust.loss.betrayal_allowed, "betrayal_allowed");
     }
     // 味方の死亡発生: 全ペア−2（第4巻5-13-2）
     if (result.deaths.length > 0) allPairs(tb.member_death_all_pairs, "member_death");
@@ -483,16 +537,22 @@ export class GameManager {
               c.exclusion = "none";
               c.downed = false;
               c.hp = Math.max(1, Math.round(c.maxHp * 0.5));
+              // 誘拐からの救出: 救出された者⇔救出戦参加者 +8（第9巻12-3-1）
+              for (const mid of ids) this.trust.add(c.id, mid, DB.trust.gain.rescue, "rescue");
+            }
+          }
+        }
+        // 夢魔の王戦「絆の呼び声」: 保持者⇔参戦2名 +5（第9巻12-3-1）
+        if (b.ctx.bossId === "nightmare_king") {
+          for (const mid of ids) {
+            if (mid !== this.gs.holder) {
+              this.trust.add(this.gs.holder, mid, DB.trust.gain.bond_call, "bond_call");
             }
           }
         }
       }
     }
 
-    // 取り憑きを許して敗走: 全ペア−3（第4巻5-9）
-    if (result.outcome !== "victory" && demonBattle && result.possessed.length > 0) {
-      allPairs(tb.demon_lose_all_pairs, "demon_lose");
-    }
     // 敗北: 控えに生存者がいれば全滅ではない→拠点へ強制送還（第4巻5-13-3）
     if (result.outcome === "defeat" && !result.goReason) {
       this.gs.location = "base";
@@ -561,13 +621,18 @@ export class GameManager {
 
   buyPrice(itemId: string): number | null {
     const sell = DB.items[itemId]?.sell;
-    return sell == null ? null : sell * DB.config.economy.buy_mult;
+    if (sell == null) return null;
+    // 隠し「ドグの身の上」: 購入価格が売値×2.5に割引（第11巻14-4 #10）
+    const mult = this.gs.flags["dog_discount"]
+      ? (DB.config.economy.buy_mult_discount ?? 2.5) : DB.config.economy.buy_mult;
+    return Math.round(sell * mult);
   }
 
   buyItem(itemId: string): boolean {
     const price = this.buyPrice(itemId);
     if (price === null || this.gs.silver < price) return false;
     this.gs.silver -= price;
+    this.gs.stats.dogSpent = (this.gs.stats.dogSpent ?? 0) + price; // 累計取引（第11巻14-4 #10）
     this.gs.inventory[itemId] = (this.gs.inventory[itemId] ?? 0) + 1;
     return true;
   }
@@ -624,6 +689,7 @@ export class GameManager {
       ctx, this.rng,
       (a, b) => this.trust.pair(a, b),
       (id) => this.trust.totalOf(id),
+      this.battlePerks(),
     );
     this.phase = "battle";
     return this.currentBattle;
@@ -643,7 +709,45 @@ export class GameManager {
     return result;
   }
 
-  // 夜襲戦闘（第14巻18-6）: 拠点に悪魔1〜2体【AI提案: 対象選択式は第9巻12-5-2受領後に差替】
+  // ============ 悪魔の夜襲イベント（第9巻12-5-2・正本）============
+  // 悪魔は一人に狙いを定める。選択肢と信頼度で裏切りを回避できる。
+  // 回避率 = 40 + 対象の全ペア信頼度合計×0.08(最大+40) + 選択肢(正解+20/中立+10/不正解+0)、上限100
+  nightRaidTarget(): string {
+    const targets = this.party.getActiveMembers().filter((c) => c.id !== "goddess");
+    // ネオは狙われやすい（第9巻12-5-2注記。係数は第14巻の詳細待ち【AI提案】×1.5）
+    const weights = targets.map((c) => (c.id === "neo" ? 1.5 : 1.0));
+    const total = weights.reduce((s, w) => s + w, 0);
+    let roll = this.rng.next() * total;
+    for (let i = 0; i < targets.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return targets[i].id;
+    }
+    return targets[targets.length - 1].id;
+  }
+
+  resolveNightRaidChoice(targetId: string, grade: "correct" | "neutral" | "wrong"):
+    { avoided: boolean; rate: number; possessed: boolean } {
+    // 会話選択肢の信頼度反映（第9巻12-5-1: 正解+2/中立±0/不正解−2・保持者⇔対象）
+    if (grade === "correct") {
+      this.trust.add(this.gs.holder, targetId, DB.trust.gain.choice_correct, "choice_correct");
+    } else if (grade === "wrong") {
+      this.trust.add(this.gs.holder, targetId, DB.trust.loss.choice_wrong, "choice_wrong");
+    }
+    const rate = this.trust.betrayalAvoidRate(targetId, grade);
+    const avoided = this.rng.chance(rate / 100);
+    if (!avoided) {
+      if (targetId === this.gs.holder) {
+        this.triggerGameOver("holder_possess"); // 対象が保持者で失敗=即GO（第9巻12-5-2）
+        return { avoided: false, rate, possessed: true };
+      }
+      this.possess(targetId); // 裏切り状態（3日以内に解除できなければ離脱・第4巻5-9）
+      this.trust.addAllPairs(DB.trust.loss.betrayal_allowed, "betrayal_allowed");
+      return { avoided: false, rate, possessed: true };
+    }
+    return { avoided: true, rate, possessed: false };
+  }
+
+  // 夜襲戦闘（第14巻18-6）: 拠点に悪魔1〜2体
   startNightRaidBattle(memberIds: string[]): BattleManager {
     const count = this.rng.int(1, 2);
     const ctx: BattleContext = {
@@ -659,6 +763,7 @@ export class GameManager {
       Array(count).fill("demon"), members, this.gs.holder, ctx, this.rng,
       (a, b) => this.trust.pair(a, b),
       (id) => this.trust.totalOf(id),
+      this.battlePerks(),
     );
     this.phase = "battle";
     return this.currentBattle;

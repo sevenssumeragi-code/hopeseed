@@ -65,7 +65,13 @@ export interface BattleResult {
   persuaded: string[];          // 戦闘中に説得/浄化で復帰したキャラ
   protectSuccessPairs: [string, string][];  // 庇う成功 from→to（信頼+3用）
   sharkKills: number;
+  possessionOccurred: string[]; // 戦闘中に取り憑きが成立したキャラ（第9巻12-3-2: −3全ペア）
+  betrayedAttacks: [string, string][];      // 裏切りキャラの攻撃 attacker→target（第9巻12-3-2: −1/回）
 }
+
+// ペア恒久ボーナス（第11巻: 第5話=庇う+5%／庇う特別2段=+5%／3段=被ダメ−10%）
+export interface PairPerk { protect: number; dmgCut: number }
+export type PairPerkFn = (a: string, b: string) => PairPerk;
 
 export function scaleEnemy(defId: string, partyAvgLv: number, areaMod: number): EnemyState {
   const def = getEnemyDef(defId);
@@ -131,6 +137,10 @@ export class BattleManager {
   private lionProcThisTurn = new Set<string>();
   private persuadedIds: string[] = [];
   private protectSuccessPairs: [string, string][] = [];
+  private possessionOccurred: string[] = [];
+  private betrayedAttacks: [string, string][] = [];
+  private pairPerk: PairPerkFn = () => ({ protect: 0, dmgCut: 0 });
+  private flagGet: (k: string) => boolean = () => false;
 
   constructor(
     enemyIds: string[],
@@ -140,6 +150,7 @@ export class BattleManager {
     rng: RNG,
     pairTrust: (a: string, b: string) => number,
     trustTotalOf?: (id: string) => number,
+    perks?: { pair?: PairPerkFn; flag?: (k: string) => boolean },
   ) {
     if (members.length > DB.config.BATTLE_MEMBERS_MAX) {
       throw new Error(`battle members exceed ${DB.config.BATTLE_MEMBERS_MAX}`);
@@ -149,6 +160,8 @@ export class BattleManager {
     this.holderId = holderId;
     this.pairTrust = pairTrust;
     this.trustTotalOf = trustTotalOf ?? (() => 0);
+    if (perks?.pair) this.pairPerk = perks.pair;
+    if (perks?.flag) this.flagGet = perks.flag;
     const avgLv = members.reduce((s, m) => s + m.level, 0) / Math.max(1, members.length);
     this.allies = members.map((m) => {
       if (m.atkBuffNextBattle > 0) {
@@ -212,6 +225,7 @@ export class BattleManager {
     const w = a.state.equippedWeapon ? DB.items[a.state.equippedWeapon] : null;
     if (w?.protect_bonus) bonus += w.protect_bonus;
     if (this.holderId === "muni") bonus += DB.config.protect.muni_holder_bonus;
+    bonus += this.pairPerk(fromId, toId).protect;  // 第5話/庇う特別2段の恒久+5%（第11巻）
     return Math.round(protectRate(
       this.allyEffSkl(a.state), this.pairTrust(fromId, toId), bonus));
   }
@@ -429,6 +443,8 @@ export class BattleManager {
         if (w?.protect_bonus) bonus += w.protect_bonus;
         // ムニ保持者「庇護の妖精」: 全員+15%（第4巻5-4-4）
         if (this.holderId === "muni") bonus += DB.config.protect.muni_holder_bonus;
+        // 第5話/庇う特別2段の恒久ボーナス（第11巻）
+        bonus += this.pairPerk(a.state.id, target.state.id).protect;
         const rate = protectRate(
           this.allyEffSkl(a.state),
           this.pairTrust(a.state.id, target.state.id),  // ペア信頼度（正本）
@@ -573,8 +589,11 @@ export class BattleManager {
   private allyStrike(a: AllyRuntime, target: EnemyState, skill: Skill): void {
     this.lastAttacker[target.id] = a.state.id;
     const user = this.allyCombatant(a);
+    // 隠しイベント「王剣の稽古」: 覇王撃の命中+5%（第11巻14-4 #7）
+    let acc = skill.accuracy;
+    if (skill.name === "覇王撃" && this.flagGet("haou_geki_acc_up")) acc += 5;
     const hit = calcHit(this.allyEffSkl(a.state), target.eva, target.buffs["eva"] ?? 0,
-      skill.accuracy, a.state.hitDebuff, this.rng, this.ctx.weatherHitPenalty ?? 0);
+      acc, a.state.hitDebuff, this.rng, this.ctx.weatherHitPenalty ?? 0);
     if (!hit) { this.log.push("miss", { b: target.def.name }); return; }
 
     // 一撃必殺（第4巻5-6-2: 命中成立後判定・ボス無効）
@@ -754,6 +773,16 @@ export class BattleManager {
     }
   }
 
+  // 庇う特別3段「背中を預けた二人」: 相方が同じ戦場で健在なら被ダメ−10%（第11巻14-3）
+  private allyDamageCutMult(target: AllyRuntime): number {
+    let cut = 0;
+    for (const other of this.allies) {
+      if (other === target || other.state.downed || other.betrayed) continue;
+      cut = Math.max(cut, this.pairPerk(target.state.id, other.state.id).dmgCut);
+    }
+    return 1 - cut;
+  }
+
   // ============ 裏切り味方の行動（第4巻5-9: 味方を通常攻撃）============
   private resolveBetrayedAction(idx: number): void {
     const b = this.allies[idx];
@@ -768,11 +797,15 @@ export class BattleManager {
       if (protector && !protector.state.downed) target = protector;
     }
     const tName = DB.characters[target.state.id].name;
+    // 裏切りキャラの攻撃: 攻撃した側⇔された側 −1／回（第9巻12-3-2【AI提案】）
+    this.betrayedAttacks.push([b.state.id, target.state.id]);
     const hit = calcHit(this.allyEffSkl(b.state), this.allyEffEva(target.state),
       target.state.buffs["eva"] ?? 0, 95, 0, this.rng, 0);
     if (!hit) { this.log.push("miss", { b: tName }); return; }
-    const dmg = calcDamage(this.allyCombatant(b), this.allyCombatant(target),
-      this.basicAttackSkill(b.state.id), this.dmgCtx({ protectedTarget: isProtected }));
+    const dmg = Math.max(1, Math.round(
+      calcDamage(this.allyCombatant(b), this.allyCombatant(target),
+        this.basicAttackSkill(b.state.id), this.dmgCtx({ protectedTarget: isProtected }))
+      * this.allyDamageCutMult(target)));
     target.state.hp -= dmg;
     this.log.push("damage", { b: tName, v: dmg });
     if (target.state.hp <= 0) this.markDowned(target);
@@ -1023,6 +1056,7 @@ export class BattleManager {
           this.outcome = "gameover";
         } else {
           victim.betrayed = true;  // 戦闘中は裏切りユニットとして残る（第4巻5-9）
+          this.possessionOccurred.push(victim.state.id);  // 取り憑き成立=−3全ペア（第9巻12-3-2）
         }
       } else {
         this.log.push("possess_fail", { b: vName });
@@ -1122,8 +1156,10 @@ export class BattleManager {
         const hits = skill.hits ?? 1;
         let total = 0;
         for (let i = 0; i < hits && !target.state.downed; i++) {
-          const dmg = calcDamage(this.enemyCombatant(e), this.allyCombatant(target),
-            skill as unknown as Skill, this.dmgCtx({ protectedTarget: isProtected }));
+          const dmg = Math.max(1, Math.round(
+            calcDamage(this.enemyCombatant(e), this.allyCombatant(target),
+              skill as unknown as Skill, this.dmgCtx({ protectedTarget: isProtected }))
+            * this.allyDamageCutMult(target)));
           target.state.hp -= dmg;
           total += dmg;
           this.log.push("damage", { b: tName, v: dmg });
@@ -1271,6 +1307,8 @@ export class BattleManager {
       possessed: [], persuaded: [...this.persuadedIds],
       protectSuccessPairs: [...this.protectSuccessPairs],
       sharkKills: 0,
+      possessionOccurred: [...this.possessionOccurred],
+      betrayedAttacks: [...this.betrayedAttacks],
     };
     if (this.hopeDevoured) result.goReason = "holder_possess";
 

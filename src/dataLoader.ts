@@ -20,7 +20,8 @@ import routeJinpachi from "../data/scenarios/routes/route_jinpachi.json";
 import routeMuni from "../data/scenarios/routes/route_muni.json";
 import routeGeru from "../data/scenarios/routes/route_geru.json";
 import routeNeo from "../data/scenarios/routes/route_neo.json";
-import talkRennyGeru from "../data/scenarios/talks/pair_renny_geru.json";
+import talks from "../data/scenarios/talks.json";
+import personal from "../data/scenarios/personal.json";
 import hidden from "../data/scenarios/hidden.json";
 import npcLines from "../data/scenarios/npc_lines.json";
 
@@ -52,6 +53,9 @@ export const DB = {
   endings: endings as any,
   achievements: (achievements as any).list as any[],
   scenarios: collectScenarios(),
+  talks: talks as any,                       // 第11巻14-1/14-2/14-3（掛け合い・庇う特別）
+  personal: personal as any,                 // 第11巻14-5（個人・第2巻待ちプレースホルダ）
+  hidden: (hidden as any).events as any[],   // 第11巻14-4（隠し12本・TalkManagerが評価）
   npcLines: npcLines as any,
 };
 
@@ -59,8 +63,6 @@ function collectScenarios(): ScenarioEvent[] {
   const out: ScenarioEvent[] = [];
   const routeFiles = [routeRenny, routeHyu, routeJinpachi, routeMuni, routeGeru, routeNeo];
   for (const rf of routeFiles) out.push(...((rf as any).events as ScenarioEvent[]));
-  out.push(talkRennyGeru as unknown as ScenarioEvent);
-  out.push(...((hidden as any).events as ScenarioEvent[]));
   return out;
 }
 

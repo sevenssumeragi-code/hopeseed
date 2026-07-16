@@ -61,10 +61,12 @@ function statusBadges(c: CharacterState): string {
   return parts.join(" ");
 }
 
-// 信頼度の段階名（第9巻未受領のため【AI提案・要差替】）とハート表示（16-3）
+// 信頼度の段階名（第9巻12-2・正本: 他人/知人/仲間/友達/親友/絆）とハート表示（16-3）
 function trustHearts(v: number): string {
   const full = Math.round(v / 20);
-  const label = v >= 80 ? "無二の絆" : v >= 60 ? "親友" : v >= 40 ? "友達" : v >= 20 ? "仲間" : "顔見知り";
+  const stages = DB.trust.stages as { min: number; name: string }[];
+  let label = stages[0].name;
+  for (const s of stages) if (v >= s.min) label = s.name;
   return `${"♥".repeat(Math.min(5, full))}${"♡".repeat(Math.max(0, 5 - full))} ${Math.round(v)} ${label}`;
 }
 
@@ -403,8 +405,8 @@ function renderBase(): void {
     : Math.max(0, DB.config.revive.cooldown_days - (gm.gs.day - gm.gs.reviveLastDay));
   const reviveLabel = deadMembers.length === 0 ? "⛩️ 湖の祠（蘇生）"
     : reviveIn <= 0 ? "⛩️ 湖の祠（祈り可能）" : `⛩️ 湖の祠（あと${reviveIn}日で祈り可能）`;
-  // 会話イベントの！通知（第13巻16-5）
-  const evCount = gm.events.evaluateTriggers().length;
+  // 会話イベントの！通知（第13巻16-5。ルート＋掛け合い/個人/隠し=第9巻12-4）
+  const evCount = gm.events.evaluateTriggers().length + gm.talks.available().length;
 
   screen().innerHTML = `
     <div class="screen-inner">
@@ -578,23 +580,48 @@ function renderBase(): void {
       (b as HTMLElement).onclick = () => {
         const id = (b as HTMLElement).dataset.id!;
         if (gm.party.revive(id)) {
-          log(DB.npcLines.lake_goddess.revive, true);
+          // 信頼度+5（復活者⇔全員）はPartyManager側で適用（第9巻12-3-1）
+          log(DB.npcLines.lake_goddess.revive.replace("{name}", DB.characters[id].name), true);
           log(`${DB.characters[id].name}が生き返った！`, true);
-          gm.trust.add(gm.gs.holder, id, DB.trust.gain.revive, "revive");
           renderPhase();
         }
       };
     });
   };
   $("#b-talk").onclick = () => {
-    const evs = gm.events.evaluateTriggers().filter((e) => e.pair || e.id.startsWith("talk"));
-    if (evs.length === 0) {
-      const all = gm.events.evaluateTriggers();
-      if (all.length > 0) { playEvent(all[0].id); return; }
-      showModal("会話", "いまは特に話すことがないようだ。（信頼度を上げると会話が生まれる）");
+    const detail = $("#base-detail");
+    const routeEvs = gm.events.evaluateTriggers();
+    const talks = gm.talks.available();
+    if (routeEvs.length === 0 && talks.length === 0) {
+      // 信頼度帯のランダム会話（第9巻12-5-1: A/B/Cセット）
+      const others = gm.party.getActiveMembers().filter((c) => c.id !== "goddess");
+      if (others.length >= 2) {
+        const i = gm.rng.int(0, others.length - 1);
+        let j = gm.rng.int(0, others.length - 2);
+        if (j >= i) j++;
+        showModal("会話", gm.talks.flavorLine(others[i].id, others[j].id)
+          + "\n\n（信頼度が上がると、特別な掛け合いが生まれる）");
+      } else {
+        showModal("会話", "いまは特に話すことがないようだ。");
+      }
       return;
     }
-    playEvent(evs[0].id);
+    // 優先度: メイン（ルート）＞個人＞掛け合い＞庇う特別（第9巻12-4）
+    const kindLabels: Record<string, string> = {
+      party: "🎉", hidden: "✨", personal: "👤", pair: "💬", group: "👥", protect_special: "🛡️",
+    };
+    const routeBtns = routeEvs.map((e) =>
+      `<button class="small route-ev-btn" data-id="${e.id}">📖 ${e.id}</button>`).join(" ");
+    const talkBtns = talks.map((t) =>
+      `<button class="small talk-btn" data-id="${t.id}">${kindLabels[t.kind] ?? ""} ${t.title}</button>`).join(" ");
+    detail.innerHTML = `<h3 class="section-title">だれかの声がする——（発生中のイベント）</h3>
+      <div class="row">${routeBtns} ${talkBtns}</div>`;
+    detail.querySelectorAll(".route-ev-btn").forEach((b) => {
+      (b as HTMLElement).onclick = () => { playEvent((b as HTMLElement).dataset.id!); renderPhase(); };
+    });
+    detail.querySelectorAll(".talk-btn").forEach((b) => {
+      (b as HTMLElement).onclick = () => playTalk((b as HTMLElement).dataset.id!);
+    });
   };
   $("#b-rest").onclick = () => {
     // 就寝確認（第13巻16-5: 誤操作で1日を失わないための二段確認）
@@ -608,7 +635,7 @@ function renderBase(): void {
     const ev = gm.rollNightEvents();
     if (ev.raid) {
       log("闇の気配——悪魔の夜襲だ！", true);
-      openNightRaidSelect();
+      openNightRaidChoice();
       return;
     }
     if (ev.dreamer) {
@@ -705,7 +732,8 @@ function startField(mapId: string): void {
   });
   // 炎の女神の加護（第3巻4-2: 供物継続時、まれに敵を焼き払う・固定文言）
   if (DB.maps[mapId].fire_grace && gm.tribute.remainingDays("fire") >= 0) {
-    const burned = field.applyFireGrace();
+    // 隠し「炎と水の姉妹」達成で加護率+10%（第11巻14-4 #3）
+    const burned = field.applyFireGrace(gm.gs.flags["grace_boost"] ? 0.10 : 0);
     if (burned) log("火の女神の力で敵が炎に包まれる！", true);
   }
   tideTimerStart = 0;
@@ -1275,11 +1303,52 @@ function execBattleTurn(): void {
 function finishSleep(): void {
   log("みんなで眠りについた…");
   gm.endDay();
+  // 絆の要約（第9巻12-7:「AとBの絆が深まった気がする」）
+  for (const line of gm.lastBondSummary) log(line);
   checkEvents();
   renderPhase();
   if (gm.gs && !gm.gs.gameOver && gm.phase !== "ending") {
     log(`${gm.gs.day}日目の朝。天候は${gm.weather.name(gm.gs.weather)}。`);
   }
+}
+
+// 悪魔の夜襲: 選択肢と信頼度で裏切り回避（第9巻12-5-2・正本）
+function openNightRaidChoice(): void {
+  const targetId = gm.nightRaidTarget();
+  const name = DB.characters[targetId].name;
+  // 3択構成: 正解/中立/不正解（12-5-1。文言は【AI提案】）
+  const choices: { text: string; grade: "correct" | "neutral" | "wrong" }[] = [
+    { text: `「${name}、そばにいる。大丈夫だ」——名前を呼び、隣に立つ`, grade: "correct" },
+    { text: "無言で武器を構え、周囲を警戒する", grade: "neutral" },
+    { text: "とっさに距離を取って様子を見る", grade: "wrong" },
+  ];
+  // 並び順はランダム（正解の位置を固定しない）
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = gm.rng.int(0, i);
+    [choices[i], choices[j]] = [choices[j], choices[i]];
+  }
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal"><h2>😈 悪魔の囁き</h2>
+    <p>闇の中、悪魔が${name}に狙いを定めた。${name}の目が虚ろに揺れている——どうする？</p>
+    <div class="menu-list" style="margin-top:14px">${choices.map((c, i) =>
+      `<button class="raid-choice" data-i="${i}" style="min-width:420px">${c.text}</button>`).join("")}</div></div>`;
+  document.body.appendChild(back);
+  back.querySelectorAll(".raid-choice").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      back.remove();
+      const grade = choices[Number((b as HTMLElement).dataset.i)].grade;
+      const r = gm.resolveNightRaidChoice(targetId, grade);
+      if (gm.phase === "gameover") { renderPhase(); return; } // 保持者で失敗=即GO
+      if (r.possessed) {
+        log(`${name}は悪魔に取り憑かれてしまった…（回避率${Math.round(r.rate)}%）`, true);
+        log("3日以内にネオの光か説得で救わなければ、島を去ってしまう。", true);
+      } else {
+        log(`${name}は踏みとどまった！（回避率${Math.round(r.rate)}%）`, true);
+      }
+      openNightRaidSelect();
+    };
+  });
 }
 
 function openNightRaidSelect(): void {
@@ -1329,8 +1398,9 @@ function openDogShop(): void {
     .filter(([id, n]) => n > 0 && DB.items[id]?.sell != null && DB.items[id].category !== "key_item");
   const sellRows = sellables.map(([id, n]) =>
     `<button class="small sell-btn" data-id="${id}">${DB.items[id].name}×${n} — ${DB.items[id].sell}銀貨で売る</button>`).join(" ");
+  const discount = gm.gs.flags["dog_discount"];
   showModal("🏪 海賊商人ドグ",
-    `ドグ「よう、戦いより商売さ。ゆっくり見てきな」（所持: ${gm.gs.silver}銀貨）\n\n【買う（売値の3倍）】\n${buyRows}\n\n【売る】\n${sellRows || "<i>売れるものがない</i>"}`,
+    `${DB.npcLines.dog.open}（所持: ${gm.gs.silver}銀貨）\n\n【買う（売値の${discount ? "2.5倍・お得意様価格" : "3倍"}）】\n${buyRows}\n\n【売る】\n${sellRows || "<i>売れるものがない</i>"}`,
     () => { gm.phase = "map"; renderFieldLoopResume(); });
   document.querySelectorAll(".buy-btn").forEach((b) => {
     (b as HTMLElement).onclick = () => {
@@ -1361,14 +1431,23 @@ function checkEvents(): void {
 function playEvent(id: string): void {
   const played = gm.events.play(id);
   if (!played) return;
-  showModal("💬", played.text, () => {
+  showModal("💬", played.text);
+  log(`（イベント: ${id}）`);
+}
+
+// 掛け合い・個人・隠し・庇う特別の再生（第11巻・TalkManager）
+function playTalk(id: string): void {
+  const played = gm.talks.play(id);
+  if (!played) return;
+  const body = played.text + (played.rewardLines.length > 0 ? "\n\n" + played.rewardLines.join("\n") : "");
+  showModal(played.title, body, () => {
     if (id === "hidden_goddess") {
       gm.joinGoddess();
       log("湖の女神が仲間に加わった！", true);
-      renderHUD();
     }
+    renderPhase();
   });
-  log(`（イベント: ${id}）`);
+  log(`（会話: ${played.title}）`);
 }
 
 // ============ Ending / GameOver ============

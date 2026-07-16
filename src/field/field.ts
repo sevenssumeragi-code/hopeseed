@@ -155,11 +155,12 @@ export class FieldState {
   }
 
   // 炎の女神の加護（第3巻4-2: 供物継続時、まれに敵を焼き払う）
-  applyFireGrace(): string | null {
+  applyFireGrace(bonusChance = 0): string | null {
     if (!this.map.fire_grace) return null;
     const enemies = this.symbols.filter((s) => s.kind === "enemy");
     if (enemies.length === 0) return null;
-    if (!this.rng.chance(DB.config.field.fire_grace_chance)) return null;
+    // 隠し「炎と水の姉妹」: 加護発動率+10%（第11巻14-4 #3）
+    if (!this.rng.chance(DB.config.field.fire_grace_chance + bonusChance)) return null;
     const target = this.rng.pick(enemies);
     this.removeSymbol(target);
     return DB.enemies[target.enemyId!]?.name ?? null;

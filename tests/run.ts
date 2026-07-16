@@ -1430,6 +1430,301 @@ test("[日誌] 供物・蘇生・イベントが記録される（第13巻16-2�
   assert(gm.gs.journal.revives.some((r) => r.charId === "neo"), "蘇生が日誌に載る");
 });
 
+console.log("[M6] 信頼度・イベント基盤（第9巻正本＋第11巻）");
+
+test("[信頼] 初期値（第9巻12-1-1）: 同級生20/ムニ絡み15/ネオ絡み5/その他10・15ペア", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  assertEq(Object.keys(gm.gs.trust).length, 15, "15ペア（女神は信頼度を持たない）");
+  assertEq(gm.trust.pair("renny", "jinpachi"), 20, "同級生=20");
+  assertEq(gm.trust.pair("hyu", "jinpachi"), 20, "同級生=20");
+  assertEq(gm.trust.pair("muni", "neo"), 15, "ムニ絡み優先=15");
+  assertEq(gm.trust.pair("renny", "neo"), 5, "ネオ絡み=5");
+  assertEq(gm.trust.pair("renny", "geru"), 10, "その他=10");
+  assertEq(gm.trust.pair("goddess", "renny"), 0, "女神は対象外");
+});
+
+test("[信頼] 段階名（12-2）と0-100クランプ", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  assertEq(gm.trust.stageName(0), "他人", "0");
+  assertEq(gm.trust.stageName(19), "他人", "19");
+  assertEq(gm.trust.stageName(20), "知人", "20");
+  assertEq(gm.trust.stageName(40), "仲間", "40");
+  assertEq(gm.trust.stageName(60), "友達", "60");
+  assertEq(gm.trust.stageName(80), "親友", "80");
+  assertEq(gm.trust.stageName(100), "絆", "100");
+  gm.trust.add("renny", "geru", 999, "test");
+  assertEq(gm.trust.pair("renny", "geru"), 100, "上限100");
+  gm.trust.add("renny", "geru", -999, "test");
+  assertEq(gm.trust.pair("renny", "geru"), 0, "下限0");
+});
+
+test("[掛け合い] ペア第1話: 信頼度20＋拠点で夕/夜＋両者在籍で解放（12-4）", () => {
+  const gm = new GameManager();
+  gm.newGame("geru", 42); // renny:jinpachi=20 が既に第1話条件を満たす
+  gm.gs.location = "base";
+  gm.gs.slot = "morning";
+  assertEq(gm.talks.availablePairTalks().length, 0, "朝は不可");
+  gm.gs.slot = "evening";
+  const avail = gm.talks.availablePairTalks();
+  assert(avail.some((t) => t.id === "talk_jinpachi_renny_1"), "レニィ×ジンパチ第1話");
+  assert(avail.some((t) => t.id === "talk_hyu_renny_1"), "レニィ×ヒュウ第1話");
+  assert(!avail.some((t) => t.pair === "geru:renny"), "信頼10のペアは未解放");
+  // 片方昏睡で消える
+  gm.gs.party["jinpachi"].comaDaysLeft = 2;
+  assert(!gm.talks.availablePairTalks().some((t) => t.pair === "jinpachi:renny"), "昏睡中は不可");
+});
+
+test("[掛け合い] 再生: +5・日誌記録・次話は40で解放・第5話で庇う+5%恒久", () => {
+  const gm = new GameManager();
+  gm.newGame("geru", 42);
+  gm.gs.location = "base";
+  gm.gs.slot = "evening";
+  const before = gm.trust.pair("renny", "jinpachi");
+  const played = gm.talks.play("talk_jinpachi_renny_1")!;
+  assert(played.text.includes("起きろ"), "本文再生");
+  assertEq(gm.trust.pair("renny", "jinpachi"), before + 5, "視聴+5");
+  assert(gm.gs.flags["talk_jinpachi_renny_1_done"], "視聴済みフラグ");
+  assert(gm.gs.journal.events.some((e) => e.id === "talk_jinpachi_renny_1"), "日誌");
+  // 第2話は40必要（現在25）
+  assert(!gm.talks.availablePairTalks().some((t) => t.id === "talk_jinpachi_renny_2"), "40未満は不可");
+  gm.gs.trust["jinpachi:renny"] = 100;
+  for (let n = 2; n <= 4; n++) gm.talks.play(`talk_jinpachi_renny_${n}`);
+  // 第5話で恒久ボーナス
+  const b = gm.startBattle(["boar"], ["renny", "jinpachi"]);
+  const rateBefore = b.protectRatePreview("jinpachi", "renny");
+  gm.settleBattle();
+  gm.talks.play("talk_jinpachi_renny_5");
+  assert(gm.gs.flags["talk5_jinpachi:renny"], "第5話フラグ");
+  assert(gm.gs.flags["pair_story_completed_jinpachi:renny"], "ED出力（12-6）");
+  const b2 = gm.startBattle(["boar"], ["renny", "jinpachi"]);
+  assertEq(b2.protectRatePreview("jinpachi", "renny"), Math.min(95, rateBefore + 5), "庇う+5%恒久");
+  gm.settleBattle();
+});
+
+test("[3人掛け合い] 3ペア合計120/180/240で順に解放（12-4）", () => {
+  const gm = new GameManager();
+  gm.newGame("geru", 42);
+  gm.gs.location = "base";
+  gm.gs.slot = "night";
+  assertEq(gm.talks.availableGroupTalks().length, 0, "初期合計60=未解放");
+  gm.gs.trust["jinpachi:renny"] = 40; gm.gs.trust["hyu:renny"] = 40; gm.gs.trust["hyu:jinpachi"] = 40;
+  assert(gm.talks.availableGroupTalks().some((t) => t.id === "talk_group3_1"), "合計120=第1話");
+  gm.talks.play("talk_group3_1");
+  assertEq(gm.talks.availableGroupTalks().length, 0, "合計135<180=第2話未解放");
+  gm.gs.trust["jinpachi:renny"] = 80; gm.gs.trust["hyu:renny"] = 80; gm.gs.trust["hyu:jinpachi"] = 80;
+  assert(gm.talks.availableGroupTalks().some((t) => t.id === "talk_group3_2"), "合計240=第2話");
+  gm.talks.play("talk_group3_2");
+  assert(gm.talks.availableGroupTalks().some((t) => t.id === "talk_group3_3"), "第3話");
+  gm.talks.play("talk_group3_3");
+  assert(gm.gs.flags["ed_flag_group3"], "ED分岐フラグ（14-2）");
+});
+
+test("[庇う特別] ペア合算3/7/15回で3段階（14-3）・2段で+5%/3段で被ダメ−10%", () => {
+  const gm = new GameManager();
+  gm.newGame("geru", 42);
+  gm.gs.location = "base";
+  gm.gs.protectCounts["renny>jinpachi"] = 2;
+  gm.gs.protectCounts["jinpachi>renny"] = 1; // 合算3
+  const a1 = gm.talks.availableProtectSpecials();
+  assert(a1.some((t) => t.id === "pspecial1_jinpachi:renny"), "合算3で第1段階");
+  const before = gm.trust.pair("renny", "jinpachi");
+  gm.talks.play("pspecial1_jinpachi:renny");
+  assertEq(gm.trust.pair("renny", "jinpachi"), before + 3, "第1段階+3");
+  gm.gs.protectCounts["renny>jinpachi"] = 7;
+  gm.talks.play("pspecial2_jinpachi:renny");
+  assert(gm.gs.flags["pspecial2_jinpachi:renny_done"], "第2段階フラグ");
+  gm.gs.protectCounts["renny>jinpachi"] = 15;
+  const p3 = gm.talks.play("pspecial3_jinpachi:renny")!;
+  assert(p3.title.includes("拳と水"), "第3段階の固有サブタイトル（正本例）");
+  assert(gm.gs.flags["protect_special_jinpachi:renny"], "ED出力（12-6）");
+  // 被ダメ−10%: 両者が同じ戦場なら×0.9
+  const b = gm.startBattle(["boar"], ["renny", "jinpachi"]) as any;
+  const target = b.allies.find((x: any) => x.state.id === "renny");
+  assertClose(b.allyDamageCutMult(target), 0.9, 1e-9, "相方健在=×0.9");
+  const solo = gm.currentBattle;
+  gm.settleBattle();
+  void solo;
+  const b2 = gm.startBattle(["boar"], ["renny", "geru"]) as any;
+  const t2 = b2.allies.find((x: any) => x.state.id === "renny");
+  assertClose(b2.allyDamageCutMult(t2), 1.0, 1e-9, "相方不在=等倍");
+  gm.settleBattle();
+});
+
+test("[個人] 対保持者信頼度20＋拠点で朝に解放・第5段階でED出力（14-5）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "base";
+  gm.gs.slot = "morning";
+  // jinpachi⇔保持者renny=20 → 第1段階
+  const avail = gm.talks.availablePersonal();
+  assert(avail.some((t) => t.id === "personal_jinpachi_1"), "ジンパチ第1段階");
+  assert(!avail.some((t) => t.char === "neo"), "ネオ(5)は未解放");
+  gm.gs.slot = "evening";
+  assertEq(gm.talks.availablePersonal().length, 0, "朝以外は不可");
+  gm.gs.slot = "morning";
+  const before = gm.trust.pair("renny", "jinpachi");
+  gm.talks.play("personal_jinpachi_1");
+  assertEq(gm.trust.pair("renny", "jinpachi"), before + 5, "視聴+5");
+  gm.gs.trust["jinpachi:renny"] = 100;
+  for (let n = 2; n <= 5; n++) gm.talks.play(`personal_jinpachi_${n}`);
+  assert(gm.gs.flags["personal_event_max_jinpachi"], "第5段階ED出力（12-6）");
+});
+
+test("[全員イベント] 100日目の宴: 全員在籍・夜に発生→全ペア+2（14-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 100;
+  gm.gs.location = "base";
+  gm.gs.slot = "night";
+  assert(gm.talks.availablePartyEvents().some((t) => t.id === "party_day100"), "発生");
+  const before = gm.trust.pair("renny", "geru");
+  gm.talks.play("party_day100");
+  assertEq(gm.trust.pair("renny", "geru"), before + 2, "全ペア+2");
+  gm.gs.day = 100;
+  assertEq(gm.talks.availablePartyEvents().length, 0, "再発生しない");
+});
+
+test("[隠し] ムニの誕生日(180日)・炎と水の姉妹(供物12回)・ドグ(500銀貨)", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.location = "base";
+  gm.gs.day = 180;
+  assert(gm.talks.availableHidden().some((t) => t.id === "hidden_muni_birthday"), "誕生日発生");
+  const before = gm.trust.pair("muni", "geru");
+  gm.talks.play("hidden_muni_birthday");
+  assertEq(gm.trust.pair("muni", "geru"), before + 5, "ムニ絡み+5");
+  // 炎と水の姉妹
+  gm.gs.tribute.fireCount = 6; gm.gs.tribute.waterCount = 6;
+  assert(gm.talks.availableHidden().some((t) => t.id === "hidden_goddess_sisters"), "供物12回");
+  gm.talks.play("hidden_goddess_sisters");
+  assert(gm.gs.flags["grace_boost"], "加護+10%フラグ");
+  // ドグの身の上
+  gm.gs.location = "beach";
+  gm.gs.stats.dogSpent = 500;
+  assert(gm.talks.availableHidden().some((t) => t.id === "hidden_dog_story"), "取引500");
+  gm.talks.play("hidden_dog_story");
+  assert(gm.gs.flags["dog_discount"], "割引フラグ");
+  assertEq(gm.buyPrice("antidote"), Math.round((DB.items["antidote"].sell ?? 0) * 2.5), "売値×2.5");
+});
+
+test("[裏切り回避式] 40+信頼合計×0.08(最大+40)+選択肢、上限100（12-5-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  // ネオの合計を300に設定
+  gm.gs.trust["neo:renny"] = 60; gm.gs.trust["jinpachi:neo"] = 60; gm.gs.trust["hyu:neo"] = 60;
+  gm.gs.trust["muni:neo"] = 60; gm.gs.trust["geru:neo"] = 60;
+  assertClose(gm.trust.betrayalAvoidRate("neo", "correct"), 40 + 24 + 20, 1e-9, "正解=84");
+  assertClose(gm.trust.betrayalAvoidRate("neo", "neutral"), 40 + 24 + 10, 1e-9, "中立=74");
+  assertClose(gm.trust.betrayalAvoidRate("neo", "wrong"), 40 + 24, 1e-9, "不正解=64");
+  // 上限: 合計500 → 信頼ボーナスは+40でキャップ
+  for (const k of ["neo:renny", "jinpachi:neo", "hyu:neo", "muni:neo", "geru:neo"]) gm.gs.trust[k] = 100;
+  assertClose(gm.trust.betrayalAvoidRate("neo", "correct"), 100, 1e-9, "上限100");
+});
+
+test("[夜襲] 回避失敗=裏切り状態＋全ペア−3／対象が保持者なら即GO（12-5-2）", () => {
+  const orig = JSON.parse(JSON.stringify(DB.config.trust.betrayal_avoid));
+  Object.assign(DB.config.trust.betrayal_avoid,
+    { base: 0, per_trust: 0, trust_bonus_cap: 0, choice_correct: 0, choice_neutral: 0, choice_wrong: 0 });
+  try {
+    const gm = new GameManager();
+    gm.newGame("renny", 42);
+    const before = gm.trust.pair("hyu", "muni");
+    const r = gm.resolveNightRaidChoice("neo", "neutral");
+    assert(!r.avoided && r.possessed, "回避率0=必ず失敗");
+    assertEq(gm.gs.party["neo"].exclusion, "betrayal", "裏切り状態");
+    assertEq(gm.gs.party["neo"].betrayalDaysLeft, 3, "3日以内に解除");
+    assertEq(gm.trust.pair("hyu", "muni"), before - 3, "取り憑き成立=全ペア−3");
+    // 保持者が対象で失敗=即GO
+    const gm2 = new GameManager();
+    gm2.newGame("renny", 42);
+    gm2.resolveNightRaidChoice("renny", "wrong");
+    assertEq(gm2.gs.gameOver, "holder_possess", "即ゲームオーバー");
+  } finally {
+    Object.assign(DB.config.trust.betrayal_avoid, orig);
+  }
+});
+
+test("[放置] 除外7日ごと−1・飢餓3日以上は毎日−2全ペア（12-3-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.party["geru"].exclusion = "dead";
+  const before = gm.trust.pair("geru", "muni");
+  for (let i = 0; i < 7; i++) passDay(gm);
+  assertEq(gm.trust.pair("geru", "muni"), before - 1, "7日放置で−1");
+  // 飢餓放置
+  const gm2 = new GameManager();
+  gm2.newGame("renny", 42);
+  const b2 = gm2.trust.pair("hyu", "muni");
+  gm2.gs.tribute.fireLastDay = gm2.gs.day; gm2.gs.tribute.waterLastDay = gm2.gs.day;
+  for (const c of Object.values(gm2.gs.party)) { c.satiety = 100; c.starveDays = 0; }
+  gm2.gs.party["neo"].starveDays = 3; // 3日目の飢餓を放置している状態
+  gm2.gs.party["neo"].satiety = 0;
+  gm2.endDay();
+  assert(gm2.trust.pair("hyu", "muni") <= b2 - 2, "飢餓放置=全ペア−2");
+});
+
+test("[信頼] 蘇生+5(復活者⇔全員)・就寝時の絆要約（12-3-1/12-7）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 10;
+  gm.gs.party["geru"].exclusion = "dead";
+  const beforeMuni = gm.trust.pair("geru", "muni");
+  const beforeHolder = gm.trust.pair("geru", "renny");
+  assert(gm.party.revive("geru"), "蘇生");
+  assertEq(gm.trust.pair("geru", "muni"), beforeMuni + 5, "復活者⇔ムニ+5");
+  assertEq(gm.trust.pair("geru", "renny"), beforeHolder + 5, "復活者⇔保持者+5");
+  passDay(gm);
+  assert(gm.lastBondSummary.some((l) => l.includes("絆が深まった")), "絆の要約（12-7）");
+  passDay(gm);
+  assertEq(gm.lastBondSummary.length, 0, "翌日はクリア済み");
+});
+
+test("[ED出力] trust_total・trust_avg_holder・完了リスト（12-6）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  // 初期合計: 20×3 + 15×5 + 5×4 + 10×3 = 185
+  assertEq(gm.trust.totalAllPairs(), 185, "trust_total初期値");
+  // renny保持者のavg: (20+20+15+10+5)/5 = 14
+  assertClose(gm.trust.avgHolder(), 14, 1e-9, "trust_avg_holder");
+  gm.gs.flags["pair_story_completed_jinpachi:renny"] = true;
+  gm.gs.flags["protect_special_geru:hyu"] = true;
+  const ed = gm.talks.edOutputs();
+  assert(ed.pairStoryCompleted.includes("jinpachi:renny"), "掛け合い完了リスト");
+  assert(ed.protectSpecial.includes("geru:hyu"), "庇う特別リスト");
+});
+
+test("[隠し] 女神加入: 保持者⇔5人合計350以上＋祠（12-4）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 250;
+  gm.gs.location = "shrine_islet";
+  assertEq(gm.talks.availableHidden().filter((t) => t.id === "hidden_goddess").length, 0, "合計70では不可");
+  for (const k of ["jinpachi:renny", "hyu:renny", "muni:renny", "geru:renny", "neo:renny"]) {
+    gm.gs.trust[k] = 70; // 合計350
+  }
+  assert(gm.talks.availableHidden().some((t) => t.id === "hidden_goddess"), "350で解放");
+  gm.talks.play("hidden_goddess");
+  assert(gm.gs.flags["goddess_joined"], "加入フラグ");
+});
+
+test("[データ] 第11巻イベント総数: ペア75・グループ3・全員3・庇う特別3段×15", () => {
+  assertEq((DB.talks.pair_talks as any[]).length, 75, "15ペア×5話");
+  assertEq((DB.talks.group_talks as any[]).length, 3, "3人掛け合い");
+  assertEq((DB.talks.party_events as any[]).length, 3, "全員イベント");
+  assertEq((DB.talks.protect_special_stages as any[]).length, 3, "庇う特別3段階");
+  assertEq(Object.keys(DB.talks.protect_special3_subtitles).filter((k) => !k.startsWith("_")).length, 15, "第3段階サブタイトル15ペア");
+  assertEq((DB.personal.events as any[]).length, 30, "個人イベント6×5");
+  assertEq((DB.hidden as any[]).length, 13, "隠し12本＋女神加入（第9巻12-4）");
+  // 全ペアIDが信頼度ペアと一致
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  for (const t of DB.talks.pair_talks as any[]) {
+    assert(t.pair in gm.gs.trust, `pair ${t.pair} が信頼度マップに存在`);
+  }
+});
+
 console.log("[M2] 365日通し");
 
 test("供物・食事を続ければ365日到達→EndingJudge", () => {

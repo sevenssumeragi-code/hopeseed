@@ -1,29 +1,58 @@
 {
-  "_source": "第9巻未受領のため初期値・増減は【AI提案・要差替】。ペアキーは英語ID昇順で 'a:b' 正規化(第16巻20-9命名規約)。muni保持者×1.5は第16巻20-8で確定。",
+  "_source": "第9巻12章（正本）。初期値は12-1-1（巻内で【AI提案】採用と明記）。段階=12-2、増減=12-3、ムニ保持者×1.5切り上げ=12-3-1。湖の女神は信頼度を持たない（12-1）。ペアキーは英語ID昇順 'a:b'（第16巻20-9）。",
   "initial_default": 10,
   "initial_pairs": {
-    "geru:renny": 20,
+    "jinpachi:renny": 20,
+    "hyu:renny": 20,
+    "hyu:jinpachi": 20,
     "muni:renny": 15,
-    "neo:renny": 15,
-    "hyu:jinpachi": 20
-  },
-  "gain": {
-    "battle_together": 1,
-    "protect_success": 5,
-    "share_meal": 2,
-    "talk_event": 3,
-    "revive": 4,
-    "gift": 3
-  },
-  "loss": {
-    "member_death": -5,
-    "left_downed": -2
+    "jinpachi:muni": 15,
+    "hyu:muni": 15,
+    "geru:muni": 15,
+    "muni:neo": 15,
+    "neo:renny": 5,
+    "jinpachi:neo": 5,
+    "hyu:neo": 5,
+    "geru:neo": 5,
+    "geru:renny": 10,
+    "geru:jinpachi": 10,
+    "geru:hyu": 10
   },
   "pairs": [
-    "renny:hyu","renny:jinpachi","renny:muni","renny:geru","renny:neo",
-    "hyu:jinpachi","hyu:muni","hyu:geru","hyu:neo",
-    "jinpachi:muni","jinpachi:geru","jinpachi:neo",
-    "muni:geru","muni:neo",
-    "geru:neo","goddess:renny"
-  ]
+    "renny:jinpachi", "renny:hyu", "renny:muni", "renny:geru", "renny:neo",
+    "jinpachi:hyu", "jinpachi:muni", "jinpachi:geru", "jinpachi:neo",
+    "hyu:muni", "hyu:geru", "hyu:neo",
+    "muni:geru", "muni:neo", "geru:neo"
+  ],
+  "stages": [
+    { "min": 0, "name": "他人" },
+    { "min": 20, "name": "知人" },
+    { "min": 40, "name": "仲間" },
+    { "min": 60, "name": "友達" },
+    { "min": 80, "name": "親友" },
+    { "min": 100, "name": "絆" }
+  ],
+  "gain": {
+    "battle_together": 1,
+    "protect_success": 3,
+    "persuade": 5,
+    "talk_view": 5,
+    "personal_event": 5,
+    "choice_correct": 2,
+    "great_meal_all": 1,
+    "revive": 5,
+    "rescue": 8,
+    "bond_call": 5
+  },
+  "loss": {
+    "member_death": -2,
+    "betrayal_allowed": -3,
+    "betray_attack": -1,
+    "choice_wrong": -2,
+    "neglect_excluded": -1,
+    "starve_neglect": -2
+  },
+  "neglect_interval_days": 7,
+  "starve_neglect_from_days": 3,
+  "group_trio": ["renny", "jinpachi", "hyu"]
 }
