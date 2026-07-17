@@ -10,6 +10,8 @@ export interface PlayedEvent {
   id: string;
   text: string;
   variantKey: string;
+  title?: string;
+  startsBoss?: string;   // 再生後に強制ボス戦（第10巻: 350日決戦）
 }
 
 export class EventManager {
@@ -26,6 +28,9 @@ export class EventManager {
       if (t.slot !== undefined && !t.slot.includes(this.gs.slot)) continue;
       if (t.flags_all?.some((f) => !this.gs.flags[f])) continue;
       if (t.flags_none?.some((f) => this.gs.flags[f])) continue;
+      // 「フラグ達成 または 代替日到達」（第10巻M5: 船長撃破済みor260日の代替入手）
+      const fod = (t as any).requires_flag_or_day;
+      if (fod && !this.gs.flags[fod.flag] && this.gs.day < fod.day) continue;
       if (t.trust_min !== undefined && ev.pair) {
         const [a, b] = ev.pair.split(":");
         if (this.trust.pair(a, b) < t.trust_min) continue;
@@ -69,7 +74,10 @@ export class EventManager {
     if (ev.core) {
       this.gs.flags[`core_${ev.id}`] = true;
     }
-    return { id: ev.id, text: variant.text, variantKey: variant.key };
+    return {
+      id: ev.id, text: variant.text, variantKey: variant.key,
+      title: ev.title, startsBoss: ev.starts_boss,
+    };
   }
 
   coreEventCount(): number {

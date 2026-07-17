@@ -6,6 +6,7 @@ import { GameManager } from "./core/gameManager.js";
 import { skillsForCharacter, enhancedSkill, statAtLevel } from "./core/stats.js";
 import { FieldState, type FieldSymbol } from "./field/field.js";
 import { rulebookText } from "./ui/rulebook.js";
+import { readGallery } from "./core/saveManager.js";
 import type { BattleManager, Command } from "./core/battle/battleManager.js";
 import type { CharacterState } from "./types.js";
 
@@ -312,9 +313,20 @@ function renderTitle(): void {
       showModal("つづきから", "セーブデータが見つからない。");
     }
   };
-  // ギャラリー（第13巻16-9: クリア後開放。実装枠のみ【AI提案】）
-  $("#btn-gallery").onclick = () => showModal("ギャラリー",
-    "クリア後に、迎えたエンディングや思い出のイベントをここで振り返ることができる。\n（まだ何も記録されていない）");
+  // ギャラリー: ED22種＋GO演出の回収状況（第12巻15-5。周回でも引き継ぎ15-7）
+  $("#btn-gallery").onclick = () => {
+    const g = readGallery();
+    const names = DB.endings.ed_names as Record<string, string>;
+    const rows = Object.keys(names).map((id) => {
+      const got = g.endings.includes(id);
+      return `<tr><td>${id}</td><td>${got ? names[id] : "？？？"}</td><td>${got ? "✅" : ""}</td></tr>`;
+    }).join("");
+    const goNames: Record<string, string> = { GO1: "保持者の死亡", GO2: "保持者の誘拐", GO3: "もう一人の首魁", GO4: "火山噴火", GO5: "島の水没" };
+    const goRows = Object.keys(goNames).map((id) =>
+      `<tr><td>${id}</td><td>${g.goSeen.includes(id) ? goNames[id] : "？？？"}</td><td>${g.goSeen.includes(id) ? "✅" : ""}</td></tr>`).join("");
+    showModal("🖼️ ギャラリー",
+      `エンディング回収: ${g.endings.length}/22\n<table class="data"><tr><th>ID</th><th>名称</th><th></th></tr>${rows}</table>\n\nゲームオーバー演出: ${g.goSeen.length}/5\n<table class="data"><tr><th>ID</th><th>名称</th><th></th></tr>${goRows}</table>`);
+  };
 }
 
 function renderPrologue(): void {
@@ -424,6 +436,8 @@ function renderBase(): void {
         <button id="b-talk">💬 会話${evCount > 0 ? `<span style="color:var(--accent)">！${evCount}</span>` : ""}</button>
         <button id="b-rest">😴 休息（就寝して翌日へ）</button>
         <button id="b-out">🗺️ 島へ出る</button>
+        ${gm.gs.day >= 350 && gm.gs.flags["final_scene_done"] && !gm.gs.flags["demon_lord_defeated"]
+          ? '<button id="b-final">⚔️ 決戦（悪魔の首魁）</button>' : ""}
       </div>
       <div id="base-detail"></div>
     </div>`;
@@ -651,6 +665,8 @@ function renderBase(): void {
     }
     finishSleep();
   };
+  const bFinal = document.querySelector("#b-final") as HTMLElement | null;
+  if (bFinal) bFinal.onclick = () => openBossBattleSelect("demon_lord");
   $("#b-out").onclick = () => {
     // 拠点からの行き先を選ぶ（拠点マップの接続先）
     const conns = DB.maps["base"].connections;
@@ -914,8 +930,11 @@ function handleFieldContact(s: FieldSymbol): void {
     }
     case "gather": {
       const item = s.gatherItem!;
-      gm.gs.inventory[item] = (gm.gs.inventory[item] ?? 0) + 1;
-      log(`${DB.items[item].name}を手に入れた。`);
+      // ムニ「おてつだい」: ムニ同行時、採取量+1（第2巻）
+      const muniBonus = gm.gs.flags["eff_muni_gather_up"]
+        && gm.party.getActiveMembers().some((c) => c.id === "muni") ? 1 : 0;
+      gm.gs.inventory[item] = (gm.gs.inventory[item] ?? 0) + 1 + muniBonus;
+      log(`${DB.items[item].name}を手に入れた。${muniBonus ? "（ムニが余分に見つけた！）" : ""}`);
       field.removeSymbol(s);
       fieldRAF = requestAnimationFrame(() => renderFieldLoopResume());
       return;
@@ -1431,8 +1450,51 @@ function checkEvents(): void {
 function playEvent(id: string): void {
   const played = gm.events.play(id);
   if (!played) return;
-  showModal("💬", played.text);
-  log(`（イベント: ${id}）`);
+  showModal(played.title ?? "💬", played.text, () => {
+    // 350日決戦: シーン再生後に強制ボス戦（第10巻）
+    if (played.startsBoss) openBossBattleSelect(played.startsBoss);
+  });
+  log(`（イベント: ${played.title ?? id}）`);
+}
+
+// 強制ボス戦のメンバー選択（第10巻: 350日決戦「悪魔の首魁」等）
+function openBossBattleSelect(bossId: string): void {
+  const bossDef = getEnemyDef(bossId);
+  const active = gm.party.getActiveMembers();
+  battleMembers = [gm.gs.holder];
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  const memberBtns = active.map((c) => {
+    const isHolder = c.id === gm.gs.holder;
+    return `<button class="small mem-btn ${isHolder ? "selected" : ""}" data-id="${c.id}" ${isHolder ? "disabled" : ""}>
+      ${isHolder ? "🌱" : ""}${DB.characters[c.id].name} Lv${c.level}</button>`;
+  }).join(" ");
+  back.innerHTML = `<div class="modal"><h2>⚔️ 決戦 — ${bossDef.name}</h2>
+    <p>出撃メンバーを選べ（最大${DB.config.BATTLE_MEMBERS_MAX}人・保持者は必ず参加）</p>
+    <div class="row" style="margin-top:10px">${memberBtns}</div>
+    <div class="modal-actions"><button id="boss-start">挑む</button></div></div>`;
+  document.body.appendChild(back);
+  back.querySelectorAll(".mem-btn:not([disabled])").forEach((b) => {
+    (b as HTMLElement).onclick = () => {
+      const id = (b as HTMLElement).dataset.id!;
+      if (battleMembers.includes(id)) {
+        battleMembers = battleMembers.filter((x) => x !== id);
+        b.classList.remove("selected");
+      } else if (battleMembers.length < DB.config.BATTLE_MEMBERS_MAX) {
+        battleMembers.push(id);
+        b.classList.add("selected");
+      }
+    };
+  });
+  (back.querySelector("#boss-start") as HTMLElement).onclick = () => {
+    back.remove();
+    nightBattle = null;
+    battle = gm.startBattle([bossId], battleMembers, true, bossId);
+    for (const line of battle.log.lines) log(line, true);
+    pendingCommands = [];
+    commandIndex = 0;
+    renderPhase();
+  };
 }
 
 // 掛け合い・個人・隠し・庇う特別の再生（第11巻・TalkManager）
@@ -1451,15 +1513,34 @@ function playTalk(id: string): void {
 }
 
 // ============ Ending / GameOver ============
-function renderEnding(): void {
+function renderEnding(neoChoice?: "return" | "stay"): void {
   cancelAnimationFrame(fieldRAF);
-  const ed = gm.endingJudge.judge();
+  const ed = gm.finalizeEnding(neoChoice);
+  // ネオルート: 帰還/残留の選択（第12巻15-4-1）
+  if (ed.needsNeoChoice) {
+    screen().innerHTML = `
+      <div class="screen-inner" style="text-align:center;padding-top:80px">
+        <h2 class="section-title" style="border:none;text-align:center">「帰り道の裂け目」の前で</h2>
+        <p style="max-width:640px;margin:24px auto;line-height:2.2">365日目。次元の裂け目が、静かに口を開けている。
+王子は、種を仲間に返し、裂け目と焚き火を交互に見た。
+——選ぶのは、いまだ。</p>
+        <div class="menu-list" style="margin-top:32px">
+          <button id="neo-return">アルカディアへ帰還する</button>
+          <button id="neo-stay">この世界に残る</button>
+        </div>
+      </div>`;
+    $("#neo-return").onclick = () => renderEnding("return");
+    $("#neo-stay").onclick = () => renderEnding("stay");
+    return;
+  }
+  const body = ed.texts.filter(Boolean).join("\n\n＊　＊　＊\n\n");
   screen().innerHTML = `
-    <div class="screen-inner" style="text-align:center;padding-top:100px">
-      <h1 class="title-logo" style="font-size:36px">${ed.name}</h1>
-      <p style="max-width:640px;margin:24px auto;line-height:2.2">${ed.desc}</p>
-      <p style="color:#9ab">365日を生き延びた。実績解除数: ${gm.gs.achievements.length}/${DB.achievements.length}</p>
-      <div class="menu-list" style="margin-top:32px"><button id="ed-title">タイトルへ</button></div>
+    <div class="screen-inner" style="max-width:760px;margin:0 auto">
+      <h1 class="title-logo" style="font-size:32px;margin-top:40px">${ed.gradeName}</h1>
+      <p class="subtitle">${ed.name}（${ed.id}）</p>
+      <div style="line-height:2.2;white-space:pre-wrap;margin:24px 0">${body}</div>
+      <p style="color:#9ab;text-align:center">365日を生き延びた。実績解除数: ${gm.gs.achievements.length}/${DB.achievements.length}</p>
+      <div class="menu-list" style="margin:32px 0"><button id="ed-title">タイトルへ（周回: ギャラリー・実績は引き継ぎ）</button></div>
     </div>`;
   $("#ed-title").onclick = () => { gm.phase = "title"; renderTitle(); };
 }
@@ -1469,21 +1550,14 @@ function renderGameOver(): void {
   const go = DB.endings.gameover;
   const reason = gm.gs.gameOver;
   const info = Object.values(go).find((g: any) => g.reason === reason) as any;
-  const flavor: Record<string, string> = {
-    holder_death: "ホープシードの光が消えた。希望とともに。",
-    holder_kidnap: "ホープシードは波の彼方へ連れ去られた。",
-    holder_possess: "ホープシードは闇に呑まれた。",
-    tribute_fire_expired: "山が怒りに震え、灼熱がすべてを呑み込んだ。",
-    tribute_water_expired: "海が静かに、しかし確実に、島を呑み込んでいった。",
-  };
   screen().innerHTML = `
-    <div class="screen-inner" style="text-align:center;padding-top:100px">
+    <div class="screen-inner" style="text-align:center;padding-top:80px">
       <h1 class="title-logo" style="font-size:40px;color:var(--danger)">GAME OVER</h1>
       <p style="font-size:18px;margin:16px">${info?.name ?? ""}</p>
-      <p style="color:#9ab">${flavor[reason ?? ""] ?? ""}</p>
-      <p style="color:#9ab;margin-top:8px">${gm.gs.day}日目のことだった。</p>
+      <p style="color:#9ab;white-space:pre-wrap;max-width:640px;margin:0 auto;line-height:2.0">${info?.text ?? ""}</p>
+      <p style="color:#9ab;margin-top:16px">${gm.gs.day}日目のことだった。</p>
       <div class="menu-list" style="margin-top:32px">
-        <button id="go-load">オートセーブから再開</button>
+        <button id="go-load">オートセーブから再開（最大1日分の巻き戻し）</button>
         <button id="go-title">タイトルへ</button>
       </div>
     </div>`;

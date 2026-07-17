@@ -15,6 +15,29 @@ function storeGet(key: string): string | null {
   return memStore.get(key) ?? null;
 }
 
+// ギャラリー（ED回収・GO閲覧。周回でも引き継ぐ・第12巻15-5/15-7）
+export interface GalleryData { endings: string[]; goSeen: string[]; }
+
+export function readGallery(): GalleryData {
+  try {
+    const raw = storeGet("hopeseed_gallery");
+    if (raw) return JSON.parse(raw) as GalleryData;
+  } catch { /* 破損時は初期化 */ }
+  return { endings: [], goSeen: [] };
+}
+
+export function recordGalleryEnding(id: string): void {
+  const g = readGallery();
+  if (!g.endings.includes(id)) g.endings.push(id);
+  storeSet("hopeseed_gallery", JSON.stringify(g));
+}
+
+export function recordGalleryGO(id: string): void {
+  const g = readGallery();
+  if (!g.goSeen.includes(id)) g.goSeen.push(id);
+  storeSet("hopeseed_gallery", JSON.stringify(g));
+}
+
 // FNV-1a 32bit チェックサム
 export function checksum(s: string): string {
   let h = 0x811c9dc5;

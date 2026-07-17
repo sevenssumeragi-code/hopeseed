@@ -267,10 +267,17 @@ export class TalkManager {
       return { id, kind: "protect_special", title: sub ? `${stage.title}「${sub}」` : stage.title, text, rewardLines };
     }
 
-    // 個人信頼度イベント
+    // 個人信頼度イベント（第2巻正本: 効果は各キャラ表の通り）
     const pe = (DB.personal.events as any[]).find((e) => e.id === id);
     if (pe) {
-      this.trust.add(this.gs.holder, pe.char, DB.personal.reward_trust ?? gain.personal_event, `personal:${id}`);
+      const amount = pe.trust ?? DB.personal.reward_trust ?? gain.personal_event;
+      this.trust.add(this.gs.holder, pe.char, amount, `personal:${id}`);
+      if (pe.effect === "trust_all_3") this.trust.addAllPairs(3, `personal:${id}`);      // ムニ「かぞくのえ」
+      if (pe.effect === "neo_name_call") this.trust.addCharAll("neo", 5, `personal:${id}`); // ネオ「貴様ではなく」
+      if (pe.effect) {
+        this.gs.flags[`eff_${pe.effect}`] = true;
+        rewardLines.push(`【恒久】${pe.title}の効果を得た`);
+      }
       if (pe.n === 5) this.gs.flags[`personal_event_max_${pe.char}`] = true; // ED出力（第9巻12-6）
       this.finish(id, "personal");
       return { id, kind: "personal", title: pe.title, text: pe.text, rewardLines };

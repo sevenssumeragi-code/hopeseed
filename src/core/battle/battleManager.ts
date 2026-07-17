@@ -224,7 +224,11 @@ export class BattleManager {
     let bonus = a.state.protectRateBuff;
     const w = a.state.equippedWeapon ? DB.items[a.state.equippedWeapon] : null;
     if (w?.protect_bonus) bonus += w.protect_bonus;
-    if (this.holderId === "muni") bonus += DB.config.protect.muni_holder_bonus;
+    if (this.holderId === "muni") {
+      bonus += DB.config.protect.muni_holder_bonus
+        + (this.flagGet("eff_fairy_awaken") ? 5 : 0); // 第2巻「あたらしいかぞく」【AI提案:+5】
+    }
+    if (fromId === "renny" && this.flagGet("eff_renny_protect_up")) bonus += 5; // 第2巻
     bonus += this.pairPerk(fromId, toId).protect;  // 第5話/庇う特別2段の恒久+5%（第11巻）
     return Math.round(protectRate(
       this.allyEffSkl(a.state), this.pairTrust(fromId, toId), bonus));
@@ -252,6 +256,7 @@ export class BattleManager {
 
   private allyEffEva(s: CharacterState): number {
     let v = effectiveStat(s, "eva");
+    if (s.id === "hyu" && this.flagGet("eff_hyu_eva_up")) v += 3; // 第2巻「前髪の下」
     const p = DB.config.passives;
     // ムニ「ミニマムボディ」: 非保持者・常時 回避×1.4
     if (s.id === "muni" && this.holderId !== "muni") v *= p.muni_minimum_body.eva_mult;
@@ -284,6 +289,8 @@ export class BattleManager {
       atk: this.allyEffAtk(s), def: this.allyEffDef(s),
       mag: def.base.mag === null ? null : effectiveStat(s, "mag"),
       buffs: s.buffs, weaknessFamily: def.weakness.battle_family,
+      weaknessMult: (s.id === "jinpachi" && this.flagGet("eff_jinpachi_swim"))
+        || (s.id === "hyu" && this.flagGet("eff_hyu_bug_courage")) ? 0.8 : undefined,
       isGuarding: a.guarding,
       hasPoison: st.poison !== undefined,
       hasAnyStatus: st.poison !== undefined || st.burn !== undefined || st.bleed !== undefined
@@ -441,8 +448,12 @@ export class BattleManager {
         let bonus = a.state.protectRateBuff;
         const w = a.state.equippedWeapon ? DB.items[a.state.equippedWeapon] : null;
         if (w?.protect_bonus) bonus += w.protect_bonus;
-        // ムニ保持者「庇護の妖精」: 全員+15%（第4巻5-4-4）
-        if (this.holderId === "muni") bonus += DB.config.protect.muni_holder_bonus;
+        // ムニ保持者「庇護の妖精」: 全員+15%（第4巻5-4-4）＋覚醒+5（第2巻【AI提案】）
+        if (this.holderId === "muni") {
+          bonus += DB.config.protect.muni_holder_bonus
+            + (this.flagGet("eff_fairy_awaken") ? 5 : 0);
+        }
+        if (a.state.id === "renny" && this.flagGet("eff_renny_protect_up")) bonus += 5; // 第2巻
         // 第5話/庇う特別2段の恒久ボーナス（第11巻）
         bonus += this.pairPerk(a.state.id, target.state.id).protect;
         const rate = protectRate(
@@ -493,7 +504,8 @@ export class BattleManager {
         const target = this.pickEnemy(cmd.targetEnemyIndex);
         if (!target || target.def.family !== "beast" || target.def.boss) return;
         if (this.rng.chance(tameRate(this.allyEffSkl(a.state)) / 100)) {
-          target.tamedTurns = DB.config.tame.turns;
+          target.tamedTurns = DB.config.tame.turns
+            + (this.flagGet("eff_tame_extend") ? 1 : 0); // 第2巻「手負いの狼」
           this.log.push("tame_ok", { b: target.def.name });
         } else {
           this.log.push("tame_ng", { b: target.def.name });
@@ -526,8 +538,10 @@ export class BattleManager {
         const raw = DB.skills[cmd.skillId];
         if (!raw || raw.owner !== a.state.id || raw.learn_lv > a.state.level) return;
         const skill = enhancedSkill(raw, a.state.level);
-        if (a.state.sp < skill.sp_cost) { this.log.push("sp_short"); return; }
-        a.state.sp -= skill.sp_cost;
+        const spCost = Math.max(0, skill.sp_cost
+          - (a.state.id === "neo" && skill.kind === "magic" && this.flagGet("eff_neo_sp_save") ? 1 : 0));
+        if (a.state.sp < spCost) { this.log.push("sp_short"); return; }
+        a.state.sp -= spCost;
         this.log.push(skill.kind === "magic" ? "magic" : "skill", { a: name, s: skill.name });
 
         // 光属性技を裏切り味方へ→浄化判定（第4巻5-9: 基礎60%・ダメージなし）
@@ -592,13 +606,15 @@ export class BattleManager {
     // 隠しイベント「王剣の稽古」: 覇王撃の命中+5%（第11巻14-4 #7）
     let acc = skill.accuracy;
     if (skill.name === "覇王撃" && this.flagGet("haou_geki_acc_up")) acc += 5;
+    if (skill.name === "覇王撃" && this.flagGet("eff_haou_master")) acc += 10; // 第2巻: 70→80
     const hit = calcHit(this.allyEffSkl(a.state), target.eva, target.buffs["eva"] ?? 0,
       acc, a.state.hitDebuff, this.rng, this.ctx.weatherHitPenalty ?? 0);
     if (!hit) { this.log.push("miss", { b: target.def.name }); return; }
 
     // 一撃必殺（第4巻5-6-2: 命中成立後判定・ボス無効）
     if (!target.def.boss) {
-      const critBonus = skill.effects.find((e) => e.type === "crit_bonus")?.amount ?? 0;
+      let critBonus = skill.effects.find((e) => e.type === "crit_bonus")?.amount ?? 0;
+      if (skill.name === "死神の口づけ" && this.flagGet("eff_hyu_kiss_up")) critBonus += 5;
       const critRate = effectiveStat(a.state, "crit") + critBonus;
       if (this.rng.chance(critRate / 100)) {
         target.hp = 0; target.alive = false;
@@ -612,7 +628,8 @@ export class BattleManager {
     if (a.state.id === "renny" && !this.lionProcThisTurn.has("renny")) {
       const p = DB.config.passives.renny_awakened_lion;
       const hasStatus = this.allyCombatant(a).hasAnyStatus;
-      if (hasStatus && this.rng.chance(p.proc)) {
+      const proc = this.flagGet("eff_lion_awaken") ? p.proc_event5 : p.proc;
+      if (hasStatus && this.rng.chance(proc)) {
         lionProc = true;
         this.lionProcThisTurn.add("renny");
         this.log.push("awakened_lion");
@@ -622,12 +639,16 @@ export class BattleManager {
     const hits = skill.hits ?? 1;
     let total = 0;
     for (let i = 0; i < hits && target.alive; i++) {
-      const dmg = calcDamage(user, this.enemyCombatant(target), skill,
+      let dmg = calcDamage(user, this.enemyCombatant(target), skill,
         this.dmgCtx({
           awakenedLionProc: lionProc,
           lightMult: (target.def.light_damage_mult && this.isLightSkill(skill))
             ? target.def.light_damage_mult : 1.0,
         }));
+      // ネオルートN7「王剣、最後の一振り」: 光の力が仲間の武器に宿る（対悪魔×1.2・第10巻）
+      if (target.def.family === "demon" && this.flagGet("neo_holder_blessing")) {
+        dmg = Math.round(dmg * 1.2);
+      }
       target.hp -= dmg;
       total += dmg;
       this.log.push("damage", { b: target.def.name, v: dmg });
@@ -647,12 +668,12 @@ export class BattleManager {
     return skill.effects.some((e) => e.type === "anti_demon");
   }
 
-  private applyBuff(state: CharacterState, eff: SkillEffect, synergyStage = 0): void {
+  private applyBuff(state: CharacterState, eff: SkillEffect, synergyStage = 0, extraTurns = 0): void {
     const cap = DB.config.damage.buff_stage_cap;
     for (const st of eff.stats ?? []) {
       const stage = (eff.stage ?? 1) + synergyStage;
       state.buffs[st] = Math.max(-cap, Math.min(cap, (state.buffs[st] ?? 0) + stage));
-      state.buffTurns[st] = eff.turns ?? DB.config.damage.buff_turns;
+      state.buffTurns[st] = (eff.turns ?? DB.config.damage.buff_turns) + extraTurns;
     }
   }
 
@@ -697,7 +718,9 @@ export class BattleManager {
           }
           case "buff": {
             if (eff.condition === "hp_below_25" && t.state.hp / t.state.maxHp > 0.25) break;
-            this.applyBuff(t.state, eff, synergyStage);
+            // 英雄の号令: 個人イベント第5段階で持続+1ターン（第2巻）
+            const extraTurns = (skill.name === "英雄の号令" && this.flagGet("eff_geru_rally_up")) ? 1 : 0;
+            this.applyBuff(t.state, eff, synergyStage, extraTurns);
             this.log.push("buff", { b: tName, s: (eff.stats ?? []).join("/") });
             break;
           }
@@ -707,7 +730,9 @@ export class BattleManager {
             break;
           }
           case "protect_rate": {
-            t.state.protectRateBuff += eff.amount ?? 20;
+            // 守って！: 個人イベント第4段階で効果量強化（第2巻【AI提案:+10】）
+            t.state.protectRateBuff += (eff.amount ?? 20)
+              + (a.state.id === "muni" && this.flagGet("eff_muni_shield_up") ? 10 : 0);
             t.state.protectRateTurns = eff.turns ?? 3;
             this.log.push("protect_rate_up", { b: tName });
             break;
@@ -1048,6 +1073,7 @@ export class BattleManager {
       }
       let chance = possess.chance ?? DB.config.possess.rate_base;
       if (victim.state.id === "neo") chance += DB.config.possess.neo_bonus;
+      if (victim.state.id === "neo" && this.flagGet("eff_neo_resist_up")) chance -= 0.15; // 第2巻
       chance -= this.trustTotalOf(victim.state.id) * DB.config.possess.resist_per_trust_total;
       if (this.rng.chance(Math.max(0.01, chance))) {
         this.log.push("possess_hit", { b: vName });
@@ -1156,10 +1182,13 @@ export class BattleManager {
         const hits = skill.hits ?? 1;
         let total = 0;
         for (let i = 0; i < hits && !target.state.downed; i++) {
+          // ジンパチ「火山の誓い」: 登山道での被ダメ−10%（第2巻）
+          const trailGuard = (target.state.id === "jinpachi" && this.ctx.location === "trail"
+            && this.flagGet("eff_jinpachi_trail_guard")) ? 0.9 : 1.0;
           const dmg = Math.max(1, Math.round(
             calcDamage(this.enemyCombatant(e), this.allyCombatant(target),
               skill as unknown as Skill, this.dmgCtx({ protectedTarget: isProtected }))
-            * this.allyDamageCutMult(target)));
+            * this.allyDamageCutMult(target) * trailGuard));
           target.state.hp -= dmg;
           total += dmg;
           this.log.push("damage", { b: tName, v: dmg });

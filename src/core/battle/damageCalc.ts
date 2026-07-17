@@ -19,6 +19,7 @@ export interface Combatant {
   mag: number | null;
   buffs: Record<string, number>;
   weaknessFamily?: string | null;
+  weaknessMult?: number;   // 個人イベントによる弱点緩和 0.7→0.8（第2巻）
   isGuarding: boolean;
   hasPoison?: boolean;
   hasAnyStatus?: boolean;
@@ -64,11 +65,12 @@ function antiDemon(skill: Skill, target: Combatant): number {
 export function weaknessStatMult(
   weaknessFamily: string | null | undefined,
   ctx: Pick<DamageContext, "enemyFamilies" | "goddessInParty">,
+  weaknessMult?: number,
 ): number {
   if (!weaknessFamily) return 1.0;
   if (ctx.goddessInParty) return 1.0;
   return ctx.enemyFamilies.includes(weaknessFamily)
-    ? DB.config.damage.weakness_stat_mult : 1.0;
+    ? (weaknessMult ?? DB.config.damage.weakness_stat_mult) : 1.0;
 }
 
 function hpScaling(user: Combatant, skill: Skill): number {
@@ -102,7 +104,7 @@ export function calcDamage(
   const statKey = skill.kind === "magic" ? "mag" : "atk";
   stat = applyBuffStage(stat, user.buffs[statKey] ?? user.buffs["atk"] ?? 0);
   if (ctx.geruLeadership && !user.isEnemy) stat *= c.geru_leadership_mult;
-  stat *= weaknessStatMult(user.weaknessFamily, ctx);
+  stat *= weaknessStatMult(user.weaknessFamily, ctx, user.weaknessMult);
   if (ctx.neoNonHolder && user.id === "neo" && skill.kind === "magic") {
     stat *= c.neo_magic_blade_mult;
   }
@@ -111,7 +113,7 @@ export function calcDamage(
     (user.isEnemy ? 1 : Math.pow(DB.config.enhance.power_mult_per_step, enhanceStage(user.level)));
 
   let defEff = applyBuffStage(target.def, target.buffs["def"] ?? 0);
-  defEff *= weaknessStatMult(target.weaknessFamily, ctx);
+  defEff *= weaknessStatMult(target.weaknessFamily, ctx, target.weaknessMult);
   const base = stat * power - defEff * c.def_factor;
 
   const variance = ctx.fixedVariance ?? ctx.rng.range(c.variance_min, c.variance_max);

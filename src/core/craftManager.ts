@@ -32,6 +32,9 @@ export class CraftManager {
       apt += DB.config.craft.muni_assist_bonus;                                 // ムニ同行
     }
     if (c && c.status.plagueDay !== undefined) apt -= DB.config.status_timers.plague_craft_penalty;
+    // 個人イベント: ジンパチ「肉の焼き方」調理+5／ゲル「薬草ノート」薬学+5（第2巻）
+    if (crafterId === "jinpachi" && type === "cook" && this.gs.flags["eff_jinpachi_cook_up"]) apt += 5;
+    if (crafterId === "geru" && type === "pharmacy" && this.gs.flags["eff_geru_pharmacy_up"]) apt += 5;
     if (this.gs.weather === "rain") apt += 5; // 雨の日は作業に最適（第3巻4-5【AI提案】）
     return apt;
   }

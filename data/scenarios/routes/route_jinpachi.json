@@ -1,26 +1,85 @@
 {
-  "_source": "第10巻未受領のため【AI提案・要差替】。保持者jinpachiルートの骨子イベント。",
+  "_source": "第10巻13-2（正本）: ジンパチルート「吼えない獅子」核心7シーン。設計は正本、脚本本文は【AI提案】（第2巻3-2口調・3-8呼称準拠）。",
   "route_id": "route_jinpachi",
   "events": [
     {
-      "id": "route_jinpachi_intro",
-      "trigger": {"day_min": 1, "day_max": 1, "location": "base", "flags_all": ["route_jinpachi"]},
-      "requires_alive": ["jinpachi"],
+      "id": "route_jinpachi_J1",
+      "title": "「俺が殴れねえだと！？」",
+      "trigger": { "day_min": 7, "location": "base", "flags_all": ["route_jinpachi"] },
+      "requires_alive": [],
       "variants": [
-        {"key":"A","cond":"default","text":"漂着から目を覚ますと、湖畔にいた。手の中には淡く光る種——ホープシード。これを託されたのは自分らしい。365日、みなで生き延びよう。"}
+        { "key": "A", "cond": "default", "text": "ジンパチ「はぁ！？　種を持ってる間は攻撃できねえ！？　ふざけんな、俺様はこの島最強の戦力だぞ！！」\n\n猛反発の翌日、最初の戦闘が起きた。ジンパチは拳を握ったまま、何もできなかった。オオカミの牙が迫った瞬間、レニィが、ヒュウが、当たり前のように前へ出た。\n\n戦いが終わって、ジンパチはしばらく動けなかった。\n\nジンパチ「……お前ら、なんで笑ってんだよ。俺様は今日、一発も殴ってねえんだぞ」\nレニィ「ジンパチが後ろにいると思うと、安心して戦えるんだよぉ」\nジンパチ「〜〜っ、意味わかんねえ！！」\n\n意味がわかるまで、あと343日ある。" }
       ],
-      "sets_flags": ["route_jinpachi_intro_done"],
+      "sets_flags": ["route_jinpachi_J1_done"],
       "core": true
     },
     {
-      "id": "route_jinpachi_mid",
-      "trigger": {"day_min": 120, "location": "base", "flags_all": ["route_jinpachi"]},
-      "requires_alive": ["jinpachi"],
+      "id": "route_jinpachi_J2",
+      "title": "「裏方の飯」",
+      "trigger": { "day_min": 50, "location": "base", "flags_all": ["route_jinpachi_J1_done"] },
+      "requires_alive": [],
       "variants": [
-        {"key":"C","cond":"trust_avg_holder>=60","text":"半年が近い。仲間との絆は確かなものになった。ホープシードの光が、少し強くなった気がする。"},
-        {"key":"A","cond":"default","text":"半年が近い。まだ島の脅威は去らない。気を引き締めていこう。"}
+        { "key": "A", "cond": "default", "text": "戦えない苛立ちは、火に向かった。かまどの火に、である。\n\nジンパチ「肉ってのはよぉ！！　（ジュウッ）　焼き方がァ！！　（ジュウウッ）　九割なんだよぉ！！」\nゲル「八つ当たりで焼くな。……いや待て、この焼き加減は完璧だ」\n\nその夜の食卓は、島に来て一番のごちそうになった。疲れ切っていた全員の顔に、血の気と笑顔が戻る。\n\nムニ「ジンパチおにいちゃんのおにく、せかいいち！」\nジンパチ「……ふん。当然だろ」\n\n皿を洗いながら、ジンパチは考えていた。（守るってのは……殴ることだけじゃ、ねえのかもな）" }
       ],
-      "sets_flags": ["route_jinpachi_mid_done"],
+      "sets_flags": ["route_jinpachi_J2_done"],
+      "core": true
+    },
+    {
+      "id": "route_jinpachi_J3",
+      "title": "「火山の主」",
+      "trigger": { "day_min": 90, "location": "base", "flags_all": ["route_jinpachi_J2_done"] },
+      "requires_alive": [],
+      "variants": [
+        { "key": "C", "cond": "trust_avg_holder>=60", "text": "火山の主が目覚めたという。ジンパチは戦えない。それでも、全員が当然のように彼を見た。\n\nジンパチ「……俺様に、指揮を執れってのか」\nゲル「適任だ。獣の呼吸はお前が一番読める。私は数字を読む。共同指揮といこう」\n\n戦いの日。ジンパチの声が戦場を支配した。\n「ブレスが来る！　息を吸った、全員防御！！」「今だ、右から回れ！！」\n\n拳を一度も使わず、勝った。\n\nジンパチ「……なあ、ゲル。戦い方ってのは、拳だけじゃねえんだな」\nゲル「今頃気づいたか。だがその声は、お前の拳より強いぞ」" },
+        { "key": "A", "cond": "default", "text": "火山の主が目覚めたという。ジンパチは戦えない。悔しさを噛み殺して、彼は見張り台から叫んだ。\n\n「ブレスが来るぞ！　息を吸ってる、避けろ！！」\n\n遠くからでも、獣の呼吸は読めた。彼の声が届くたび、仲間の被害がひとつ減った。\n\n戦いが終わり、戻ってきた仲間たちに、ジンパチはぶっきらぼうに言った。\n\nジンパチ「……無事なら、いい。飯にするぞ」\n\n拳を使わない勝利の味を、彼はまだ、うまく飲み込めずにいる。" }
+      ],
+      "sets_flags": ["route_jinpachi_J3_done"],
+      "core": true
+    },
+    {
+      "id": "route_jinpachi_J4",
+      "title": "「親父の動物園」",
+      "trigger": { "day_min": 170, "location": "base", "flags_all": ["route_jinpachi_J3_done"] },
+      "requires_alive": [],
+      "variants": [
+        { "key": "C", "cond": "trust_avg_holder>=60", "text": "焚き火の夜。珍しく、ジンパチが自分から話し始めた。\n\nジンパチ「……うち、動物園なんだよ。ちっせえ、潰れかけのな」\n\n客が減り、餌代が払えず、親父は頭を下げてばかりいた。あの背中が嫌いだった。「強けりゃ頭なんか下げなくて済む」と思って、喧嘩ばかりして、最後は親父と怒鳴り合って船に乗った。\n\nジンパチ「けどよ。この島に来てわかった。あの人は、弱かったんじゃねえ。守るもんのために、頭を下げられるほど強かったんだ」\n\n炎が爆ぜた。誰も茶化さなかった。\n\nムニ「……どうぶつえん、ムニもいきたい」\nジンパチ「おう。帰ったら全員招待だ。ライオンの餌やり、やらせてやるよ」\n\n約束がひとつ、増えた。" },
+        { "key": "A", "cond": "default", "text": "焚き火の夜。ぽつりぽつりと、ジンパチが漏らした。\n\nジンパチ「……うち、動物園なんだ。潰れかけのな。親父とは、喧嘩したまま船に乗った」\n\nそれ以上は語らなかった。ただ、火の粉が上がる空を見上げて、一言。\n\nジンパチ「……生きて帰らねえとな。殴り合いの続きが残ってる」\n\nその横顔は、いつもの俺様ではなく、ただの17歳だった。" }
+      ],
+      "sets_flags": ["route_jinpachi_J4_done"],
+      "core": true
+    },
+    {
+      "id": "route_jinpachi_J5",
+      "title": "「手負いの群れ」",
+      "trigger": { "day_min": 230, "location": "base", "flags_all": ["route_jinpachi_J4_done"] },
+      "requires_alive": [],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "夜明け前、拠点の周りが獣の気配で満ちた。オオカミの群れ——だが様子がおかしい。傷だらけで、怯えて、悪魔に追われてきたのだ。\n\nヒュウ「追い払いますか？　それとも……」\nジンパチ「——待て」\n\nジンパチは武器を置き、群れの前に丸腰で歩み出た。先頭の大狼と、長い長い時間、目を合わせる。\n\nジンパチ「……怖かったな。もう大丈夫だ。ここは俺様の縄張りだ。悪魔は入れねえ」\n\n大狼は一声鳴き、群れは拠点の外周に身を伏せた。その夜から数日、島の獣たちが拠点の見張り番になった。\n\nゲル「戦わずに群れを従えたか。……猛獣使いの本領は、拳ではなく信頼だったわけだ」" }
+      ],
+      "sets_flags": ["route_jinpachi_J5_done"],
+      "core": true
+    },
+    {
+      "id": "route_jinpachi_J6",
+      "title": "「吼えろ、獅子」",
+      "trigger": { "day_min": 300, "location": "base", "flags_all": ["route_jinpachi_J5_done"] },
+      "requires_alive": [],
+      "variants": [
+        { "key": "A", "cond": "default", "text": "首魁の先兵が、夜の拠点に押し寄せた。\n\n乱戦。仲間の陣形が崩れかける。剣も拳も封じられたジンパチにできることは、もう一つしか残っていなかった。\n\n彼は、吼えた。\n\n「——怯むんじゃねえぞオラァァァ！！　お前らは俺様が選んだ、島最強の群れだ！！　胸張って暴れろ！！」\n\n咆哮は震えていた仲間の背骨を貫き、火を入れた。ヒュウの刃が冴え、ゲルの号令が重なり、陣形が息を吹き返す。悪魔たちは、群れの結束に牙が立たず、闇へ退いた。\n\nレニィ「ジンパチの声って、まほうだねぇ」\nジンパチ「……ばーか。腹から出してるだけだ」\n\n吼えない獅子は、吼え方を変えただけだった。" }
+      ],
+      "sets_flags": ["route_jinpachi_J6_done"],
+      "core": true
+    },
+    {
+      "id": "route_jinpachi_J7",
+      "title": "決戦「俺の背中は任せた」",
+      "trigger": { "day_min": 350, "location": "base", "flags_all": ["route_jinpachi_J6_done"] },
+      "requires_alive": [],
+      "starts_boss": "demon_lord",
+      "variants": [
+        { "key": "A", "cond": "default", "text": "350日目。悪魔の首魁が、降り立った。\n\n『力ヲ奪ワレタ獣ヨ。惨メダロウ。守ラレルダケノ王ナド』\n\nジンパチは笑った。心の底から、笑った。\n\nジンパチ「惨め？　逆だなぁ。俺様はこの1年で、一番つええもんを手に入れたぜ」\n\n彼は仲間を見回し、それから、生まれて初めての言葉を口にした。\n\nジンパチ「——俺の背中は任せた。頼んだぞ、お前ら」\n\n守ってくれ、と。あの俺様が、まっすぐに。\n\nヒュウ「ええ。お任せください」\nゲル「遅い成長だ。だが、満点だ」\n\n獅子は前衛には立たない。群れの真ん中で、誰より大きく吼えるのだ。決戦が、始まる。" }
+      ],
+      "sets_flags": ["route_jinpachi_J7_done", "final_scene_done"],
       "core": true
     }
   ]

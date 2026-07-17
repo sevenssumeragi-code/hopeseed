@@ -252,6 +252,8 @@ export interface ScenarioEvent {
   sets_flags?: string[];
   pair?: string;
   core?: boolean;
+  title?: string;         // 第10巻13-8: シーン名
+  starts_boss?: string;   // 再生後に強制ボス戦（350日決戦=悪魔の首魁）
 }
 
 export type GOReason =

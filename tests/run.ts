@@ -2,14 +2,14 @@
 
 import { DB, validateData } from "../src/dataLoader.js";
 import { GameManager } from "../src/core/gameManager.js";
-import { protectRate, applyBuffStage, calcHit, fleeRate, tameRate, persuadeRate } from "../src/core/battle/damageCalc.js";
+import { protectRate, applyBuffStage, calcHit, fleeRate, tameRate, persuadeRate, weaknessStatMult } from "../src/core/battle/damageCalc.js";
 import { RNG } from "../src/core/rng.js";
 import { scaleEnemy } from "../src/core/battle/battleManager.js";
 import { FieldState } from "../src/field/field.js";
 import {
   statAtLevel, enhanceStage, enhancedSkill, expToNext, skillsForCharacter,
 } from "../src/core/stats.js";
-import { checksum } from "../src/core/saveManager.js";
+import { checksum, readGallery } from "../src/core/saveManager.js";
 import { pairKey } from "../src/core/trustManager.js";
 
 let passed = 0, failed = 0;
@@ -655,14 +655,15 @@ test("[信頼] ムニ保持者×1.5切り上げ", () => {
   assertEq(gm.gs.trust[key], before + 5, "3→5");
 });
 
-test("[ED] 真ED条件: 除外0+avg80+核心7/7+隠し旗", () => {
+test("[ED] 真ED条件: 除外0+avg80+核心7/7+隠しED旗（第12巻15-1）", () => {
   const gm = new GameManager();
   gm.newGame("renny", 42);
   gm.gs.day = 365;
   for (const key of Object.keys(gm.gs.trust)) gm.gs.trust[key] = 90;
   for (let i = 1; i <= 7; i++) gm.gs.flags[`core_ev${i}`] = true;
-  gm.joinGoddess();
-  assertEq(gm.endingJudge.judge().id, "TRUE", "真ED");
+  gm.gs.flags["ed_flag_starry_night"] = true; // 隠し「星降る夜」視聴済み
+  assertEq(gm.endingJudge.judge().grade, "true", "真グレード");
+  assertEq(gm.endingJudge.judge().id, "ED01", "レニィ真ED=ED01");
 });
 
 test("[隠し] 女神加入: パーティ平均Lv(下限40)で参入", () => {
@@ -1723,6 +1724,194 @@ test("[データ] 第11巻イベント総数: ペア75・グループ3・全員3
   for (const t of DB.talks.pair_talks as any[]) {
     assert(t.pair in gm.gs.trust, `pair ${t.pair} が信頼度マップに存在`);
   }
+});
+
+console.log("[M7] シナリオ・ボス・ED（第10巻＋第12巻＋第2巻）");
+
+test("[受け入れ基準M7] レニィルート通しプレイ: R1〜R7→首魁戦→真ED（ED01）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 7);
+  for (const key of Object.keys(gm.gs.trust)) gm.gs.trust[key] = 90;
+  const played: string[] = [];
+  let bossFought = false;
+  let guard = 0;
+  while (gm.phase !== "ending" && gm.phase !== "gameover" && guard++ < 400) {
+    // 拠点で発生中のルートイベントを消化（第10巻: 日数で解放・保留繰り越し）
+    for (const ev of gm.events.evaluateTriggers()) {
+      const p = gm.events.play(ev.id)!;
+      played.push(p.id);
+      if (p.startsBoss) {
+        // 350日決戦: 悪魔の首魁戦（第8巻11-5）
+        const b = gm.startBattle([p.startsBoss], ["renny", "jinpachi", "hyu", "geru"], true, p.startsBoss);
+        assert(b.enemies[0].def.boss === true, "首魁はボス");
+        b.enemies.forEach((e) => { e.hp = 0; e.alive = false; });
+        b.finish();
+        const r = gm.settleBattle();
+        assertEq(r.outcome, "victory", "首魁撃破");
+        bossFought = true;
+      }
+    }
+    if (gm.gs.day === 210 && !gm.gs.flags["hidden_starry_night_done"]) {
+      gm.talks.play("hidden_starry_night"); // 隠しED旗（第12巻15-1）
+    }
+    if ((gm.phase as string) === "ending" || (gm.phase as string) === "gameover") break;
+    passDay(gm, true);
+  }
+  assertEq(played.filter((id) => id.startsWith("route_renny_R")).length, 7, "核心7シーン消化");
+  assert(gm.gs.flags["route_renny_R4_done"], "R4視聴");
+  assert(bossFought, "首魁戦発生");
+  assert(gm.gs.flags["demon_lord_defeated"], "首魁撃破フラグ");
+  assert(gm.gs.achievements.includes("hope_uneatable"), "実績「希望は喰えない」");
+  assertEq(gm.phase, "ending", "365日到達");
+  const ed = gm.endingJudge.judge();
+  assertEq(ed.grade, "true", "真グレード");
+  assertEq(ed.id, "ED01", "ED01=希望の芽吹き（レニィ）");
+  assert(ed.texts.some((t) => t.includes("開花")), "本編: 種の開花");
+  assert(ed.texts.some((t) => t.includes("夢を見ずに")), "ルートエピローグ");
+});
+
+test("[ED] 信頼度分岐: R4はavg60以上でC版（打ち明ける）／未満でA版（抱え込む）", () => {
+  for (const [avg, key] of [[90, "C"], [10, "A"]] as [number, string][]) {
+    const gm = new GameManager();
+    gm.newGame("renny", 42);
+    for (const k of ["jinpachi:renny", "hyu:renny", "muni:renny", "geru:renny", "neo:renny"]) {
+      gm.gs.trust[k] = avg;
+    }
+    gm.gs.flags["route_renny_R3_done"] = true;
+    gm.gs.day = 160;
+    const p = gm.events.play("route_renny_R4")!;
+    assertEq(p.variantKey, key, `avg${avg}=${key}版`);
+  }
+});
+
+test("[ED] グレード判定: グッド/ノーマル/ビター（第12巻15-1）", () => {
+  // グッド: 除外0＋avg50以上
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 365;
+  for (const k of Object.keys(gm.gs.trust)) gm.gs.trust[k] = 60;
+  assertEq(gm.endingJudge.judge().grade, "good", "グッド");
+  assertEq(gm.endingJudge.judge().id, "ED07", "ED07");
+  // ノーマル: 除外者あり
+  gm.gs.party["neo"].exclusion = "dead";
+  assertEq(gm.endingJudge.judge().grade, "normal", "ノーマル");
+  assertEq(gm.endingJudge.judge().id, "ED13", "ED13");
+  // 誘拐中の仲間がいるノーマルは「必ず迎えに戻る」後日談付き（15-2）
+  gm.gs.party["muni"].exclusion = "kidnapped";
+  assert(gm.endingJudge.judge().texts.some((t) => t.includes("迎えに戻る")), "誘拐差分");
+  // ビター: 保持者以外全員除外
+  for (const id of ["jinpachi", "hyu", "muni", "geru", "neo"]) gm.gs.party[id].exclusion = "dead";
+  assertEq(gm.endingJudge.judge().grade, "bitter", "ビター");
+  assertEq(gm.endingJudge.judge().id, "ED19", "ED19");
+  // 昏睡は生存扱い（15-1）
+  const gm2 = new GameManager();
+  gm2.newGame("renny", 42);
+  gm2.gs.day = 365;
+  for (const k of Object.keys(gm2.gs.trust)) gm2.gs.trust[k] = 60;
+  gm2.gs.party["hyu"].exclusion = "coma";
+  gm2.gs.party["hyu"].comaDaysLeft = 2;
+  assertEq(gm2.endingJudge.judge().grade, "good", "昏睡=生存扱い");
+});
+
+test("[受け入れ基準M7] 全6ルート通し: 核心7×6＋特殊ED（ED20/21/22）", () => {
+  const results: Record<string, string> = {};
+  for (const holder of ["renny", "jinpachi", "hyu", "muni", "geru", "neo"]) {
+    const gm = new GameManager();
+    gm.newGame(holder, 7);
+    for (const key of Object.keys(gm.gs.trust)) gm.gs.trust[key] = 95;
+    if (holder === "muni") gm.gs.flags["pirate_captain_defeated"] = true; // M5正規ルート
+    let played = 0;
+    let guard = 0;
+    while ((gm.phase as string) !== "ending" && (gm.phase as string) !== "gameover" && guard++ < 400) {
+      for (const ev of gm.events.evaluateTriggers()) {
+        const p = gm.events.play(ev.id)!;
+        if (p.id.startsWith("route_")) played++;
+        if (p.startsBoss) {
+          const b = gm.startBattle([p.startsBoss], [holder, ...["renny", "jinpachi", "hyu", "geru"].filter((x) => x !== holder).slice(0, 3)], true, p.startsBoss);
+          b.enemies.forEach((e) => { e.hp = 0; e.alive = false; });
+          b.finish();
+          gm.settleBattle();
+        }
+      }
+      if (gm.gs.day === 210 && !gm.gs.flags["hidden_starry_night_done"]) gm.talks.play("hidden_starry_night");
+      if (holder === "muni" && gm.gs.day === 230) gm.gs.flags["hidden_dream_reunion_done"] = true; // 再会ED条件
+      if ((gm.phase as string) === "ending" || (gm.phase as string) === "gameover") break;
+      passDay(gm, true);
+    }
+    assertEq(gm.phase, "ending", `${holder}: 365日到達`);
+    assertEq(played, 7, `${holder}: 核心7シーン`);
+    const ed = gm.endingJudge.judge();
+    if (holder === "neo") {
+      assert(ed.needsNeoChoice, "ネオ: 帰還/残留の選択待ち（15-4-1）");
+      const stay = gm.finalizeEnding("stay");
+      assertEq(stay.id, "ED21", "残留=ED21");
+      const ret = gm.finalizeEnding("return");
+      assertEq(ret.id, "ED20", "帰還=ED20");
+      assert(ret.texts.some((t) => t.includes("手紙")), "avg90以上の帰還=隠し後日談");
+      results[holder] = "ED20/21";
+    } else if (holder === "muni") {
+      assertEq(ed.id, "ED22", "ムニ再会ED（15-4-2）");
+      assert(ed.texts.some((t) => t.includes("おかえり") || t.includes("ぱぱ")), "再会本文");
+      results[holder] = ed.id;
+    } else {
+      assertEq(ed.grade, "true", `${holder}: 真グレード`);
+      results[holder] = ed.id;
+    }
+  }
+  assertEq(results["renny"], "ED01", "レニィ=ED01");
+  assertEq(results["geru"], "ED05", "ゲル=ED05");
+});
+
+test("[第2巻] クラフト適性が3-9正本と一致", () => {
+  const t = (id: string) => DB.characters[id].craft;
+  assertEq(t("renny").cook, 55, "レニィ調理55");
+  assertEq(t("jinpachi").pharmacy, 25, "ジンパチ薬25");
+  assertEq(t("hyu").cook, 50, "ヒュウ調理50");
+  assertEq(t("muni").build, 15, "ムニ工作15");
+  assertEq(t("geru").pharmacy, 90, "ゲル薬90");
+  assertEq(t("neo").build, 65, "ネオ工作65");
+});
+
+test("[第2巻] 個人イベント効果: 弱点緩和0.8・適性+5・特殊信頼報酬", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  // ジンパチ「俺様の弱点」: 巨大魚ペナルティ0.7→0.8
+  gm.talks.play("personal_jinpachi_3");
+  assert(gm.gs.flags["eff_jinpachi_swim"], "緩和フラグ");
+  const ctx = { enemyFamilies: ["fish"], goddessInParty: false };
+  assertClose(weaknessStatMult("fish", ctx, 0.8), 0.8, 1e-9, "緩和後0.8");
+  assertClose(weaknessStatMult("fish", ctx), 0.7, 1e-9, "既定0.7");
+  // ジンパチ「肉の焼き方」: 調理適性+5
+  const before = gm.craft.aptitude("cook", "jinpachi");
+  gm.talks.play("personal_jinpachi_1");
+  assertEq(gm.craft.aptitude("cook", "jinpachi"), before + 5, "調理+5");
+  // ゲル「画面の向こう」: 信頼度+10（通常+5でなく）
+  const g0 = gm.trust.pair("renny", "geru");
+  gm.talks.play("personal_geru_3");
+  assertEq(gm.trust.pair("renny", "geru"), g0 + 10, "ゲル第3段階=+10");
+  // ネオ「貴様ではなく」: 全員の信頼度+5（ネオ⇔全員）
+  const n0 = gm.trust.pair("neo", "muni");
+  gm.talks.play("personal_neo_3");
+  assertEq(gm.trust.pair("neo", "muni"), n0 + 5, "ネオ⇔ムニ+5");
+  // レニィ「蒼き覚醒」: 発動率60%フラグ
+  gm.talks.play("personal_renny_5");
+  assert(gm.gs.flags["eff_lion_awaken"], "シシ覚醒フラグ");
+});
+
+test("[ギャラリー] ED・GO演出の回収記録（第12巻15-5/15-7: 周回引き継ぎ）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.day = 365;
+  gm.finalizeEnding();
+  const g1 = readGallery();
+  assert(g1.endings.length > 0, "ED記録");
+  gm.triggerGameOver("holder_death");
+  const g2 = readGallery();
+  assert(g2.goSeen.includes("GO1"), "GO1記録");
+  // 周回: newGameしてもギャラリーは残る
+  const gm2 = new GameManager();
+  gm2.newGame("hyu", 43);
+  assert(readGallery().endings.length > 0, "周回引き継ぎ");
 });
 
 console.log("[M2] 365日通し");

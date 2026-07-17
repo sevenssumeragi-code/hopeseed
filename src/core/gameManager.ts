@@ -12,7 +12,7 @@ import { TalkManager } from "./talkManager.js";
 import { CraftManager } from "./craftManager.js";
 import { EndingJudge } from "./endingJudge.js";
 import { AchievementManager } from "./achievementManager.js";
-import { SaveManager } from "./saveManager.js";
+import { SaveManager, recordGalleryEnding, recordGalleryGO } from "./saveManager.js";
 import {
   BattleManager, type BattleContext, type BattleResult,
 } from "./battle/battleManager.js";
@@ -142,7 +142,9 @@ export class GameManager {
       this.phase = "ending";
       const ed = this.endingJudge.judge();
       this.lastEndingId = ed.id;
-      this.achievements.check(ed.id);
+      // ネオルートの帰還/残留選択待ちの場合はUIが finalizeEnding() で確定する（第12巻15-4-1）
+      if (!ed.needsNeoChoice) recordGalleryEnding(ed.id);
+      this.achievements.check(ed.grade);
       return;
     }
     this.gs.day++;
@@ -189,6 +191,7 @@ export class GameManager {
       for (const c of this.party.getActiveMembers()) {
         let rate = c.id === "renny" ? DB.config.dream.rate_renny : DB.config.dream.rate_base;
         if (this.gs.flags["nightmare_king_defeated"]) rate *= DB.config.dream.king_defeat_mult;
+        if (this.gs.flags["eff_dream_guard"]) rate *= 0.9; // レニィ「眠れない夜」（第2巻: 遭遇率−10%）
         if (this.rng.chance(rate)) { dreamer = c.id; break; } // 一晩に1人
       }
     }
@@ -769,9 +772,23 @@ export class GameManager {
     return this.currentBattle;
   }
 
+  // ネオルート帰還/残留の確定（第12巻15-4-1）。ギャラリーへ記録して結果を返す
+  finalizeEnding(neoChoice?: "return" | "stay"): ReturnType<EndingJudge["judge"]> {
+    const ed = this.endingJudge.judge(neoChoice);
+    this.lastEndingId = ed.id;
+    if (!ed.needsNeoChoice) recordGalleryEnding(ed.id);
+    return ed;
+  }
+
   triggerGameOver(reason: GOReason): void {
     this.gs.gameOver = reason;
     this.phase = "gameover";
+    // GO演出のギャラリー記録（第12巻15-6。GO3は周回で追加台詞の布石）
+    const goId = ({
+      holder_death: "GO1", holder_kidnap: "GO2", holder_possess: "GO3",
+      tribute_fire_expired: "GO4", tribute_water_expired: "GO5",
+    } as Record<string, string>)[reason];
+    if (goId) recordGalleryGO(goId);
   }
 
   possess(charId: string): void {
