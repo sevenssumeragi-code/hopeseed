@@ -1,119 +1,663 @@
 {
-  "_source": "第15巻未受領のため【AI提案・要差替】(GDDは実績65種)。ここでは代表12種を定義。id/cond/hiddenで管理。",
+  "_source": "第15巻19章（正本）: 通常50＋隠し15=全65種。重み=通常1/隠し2/A49・A50・H14・H15=5（19-3-1）。周回累積（システムデータ保存）。",
   "list": [
     {
-      "id": "first_blood",
-      "name": "はじめての勝利",
+      "id": "A01",
+      "name": "漂流者たち",
       "cond": {
-        "battles_won": 1
+        "survived_day": 1
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "survivor_30",
-      "name": "1ヶ月生存",
+      "id": "A02",
+      "name": "最初の七日間",
+      "cond": {
+        "survived_day": 7
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A03",
+      "name": "一ヶ月の奇跡",
       "cond": {
         "survived_day": 30
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "survivor_100",
-      "name": "100日生存",
+      "id": "A04",
+      "name": "折り返しの朝",
       "cond": {
-        "survived_day": 100
+        "survived_day": 183
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "survivor_365",
-      "name": "1年生存",
+      "id": "A05",
+      "name": "一年目の朝",
       "cond": {
-        "survived_day": 365
+        "survived_day": 365,
+        "ending_any": true
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "chef",
-      "name": "島の料理人",
+      "id": "A06",
+      "name": "火山の主を討つ者",
       "cond": {
-        "cooked": 20
+        "flag": "volcano_lord_defeated"
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "blacksmith",
-      "name": "島の鍛冶師",
+      "id": "A07",
+      "name": "船長室の決着",
       "cond": {
-        "built": 10
+        "flag": "pirate_captain_defeated"
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "pharmacist",
-      "name": "島の薬師",
+      "id": "A08",
+      "name": "海の王",
       "cond": {
-        "brewed": 10
+        "flag": "deep_sea_nushi_defeated"
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "reviver",
-      "name": "祠の奇跡",
+      "id": "A09",
+      "name": "まどろみの果て",
       "cond": {
-        "revived": 1
+        "flag": "nightmare_king_defeated"
       },
-      "hidden": false
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "protector",
-      "name": "盾となりて",
-      "cond": {
-        "protect_success": 10
-      },
-      "hidden": false
-    },
-    {
-      "id": "bonded",
-      "name": "深き絆",
-      "cond": {
-        "trust_avg_min": 80
-      },
-      "hidden": false
-    },
-    {
-      "id": "true_end",
-      "name": "希望の種",
-      "cond": {
-        "ending": "true"
-      },
-      "hidden": true
-    },
-    {
-      "id": "goddess_met",
-      "name": "湖の女神",
-      "cond": {
-        "flag": "goddess_joined"
-      },
-      "hidden": true
-    },
-    {
-      "id": "hope_uneatable",
+      "id": "A10",
       "name": "希望は喰えない",
       "cond": {
         "flag": "demon_lord_defeated"
       },
-      "hidden": true,
-      "_source": "第8巻11-5"
+      "hidden": false,
+      "weight": 1
     },
     {
-      "id": "goddess_monologue",
+      "id": "A11",
+      "name": "はじめての勝利",
+      "cond": {
+        "battles_won": 1
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A12",
+      "name": "百戦錬磨",
+      "cond": {
+        "battles_won": 100
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A13",
+      "name": "盾となる者",
+      "cond": {
+        "protect_success": 10
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A14",
+      "name": "絆の壁",
+      "cond": {
+        "protect_success": 50
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A15",
+      "name": "急所の芸術",
+      "cond": {
+        "stat": {
+          "key": "crits",
+          "min": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A16",
+      "name": "猛獣の友",
+      "cond": {
+        "stat": {
+          "key": "tamed",
+          "min": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A17",
+      "name": "光は闇を払う",
+      "cond": {
+        "flag": "purify_done"
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A18",
+      "name": "声よ届け",
+      "cond": {
+        "stat": {
+          "key": "persuadedCount",
+          "min": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A19",
+      "name": "無傷の指揮",
+      "cond": {
+        "stat": {
+          "key": "flawlessWins",
+          "min": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A20",
+      "name": "逃げるは恥だが",
+      "cond": {
+        "stat": {
+          "key": "fleeWins",
+          "min": 10
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A21",
+      "name": "約束の火",
+      "cond": {
+        "tribute_fire_min": 1
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A22",
+      "name": "約束の水",
+      "cond": {
+        "tribute_water_min": 1
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A23",
+      "name": "律儀な子ら",
+      "cond": {
+        "tribute_total_min": 12
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A24",
+      "name": "おかえりなさい",
+      "cond": {
+        "revived": 1
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A25",
+      "name": "全員奪還",
+      "cond": {
+        "flag": "rescued_someone"
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A26",
+      "name": "名医の島",
+      "cond": {
+        "stat": {
+          "key": "cured",
+          "min": 30
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A27",
+      "name": "満潮を制す",
+      "cond": {
+        "stat": {
+          "key": "shallowsSafeReturns",
+          "min": 10
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A28",
+      "name": "夜明けの生還",
+      "cond": {
+        "stat": {
+          "key": "raidsClean",
+          "min": 10
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A29",
+      "name": "悪夢おことわり",
+      "cond": {
+        "stat": {
+          "key": "dreamWins",
+          "min": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A30",
+      "name": "飽食の島",
+      "cond": {
+        "stat": {
+          "key": "satietyStreak",
+          "min": 100
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A31",
+      "name": "はじめての親友",
+      "cond": {
+        "pair_max": 80
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A32",
+      "name": "絆の証",
+      "cond": {
+        "pair_max": 100
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A33",
+      "name": "十五の物語",
+      "cond": {
+        "flag_count": {
+          "prefix": "pair_story_completed_",
+          "count": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A34",
+      "name": "同級生トリオ",
+      "cond": {
+        "flag": "talk_group3_3_done"
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A35",
+      "name": "背中を預けた二人",
+      "cond": {
+        "flag_count": {
+          "prefix": "protect_special_",
+          "count": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A36",
+      "name": "みんなのうた",
+      "cond": {
+        "flag": "brave_synergy_done"
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A37",
+      "name": "家族の練習",
+      "cond": {
+        "flag": "personal_muni_5_done"
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A38",
+      "name": "女神の旅立ち",
+      "cond": {
+        "flag": "goddess_joined"
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A39",
+      "name": "見習い料理人",
+      "cond": {
+        "stat": {
+          "key": "greatCooked",
+          "min": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A40",
+      "name": "島の三ツ星",
+      "cond": {
+        "flag_count": {
+          "prefix": "great_cook_",
+          "count": 12
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A41",
+      "name": "鍛冶はじめ",
+      "cond": {
+        "flag": "weapon_built"
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A42",
+      "name": "至高の得物",
+      "cond": {
+        "flag_count": {
+          "prefix": "built_",
+          "count": 1
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A43",
+      "name": "六つの切り札",
+      "cond": {
+        "flag_count": {
+          "prefix": "built_",
+          "count": 6
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A44",
+      "name": "薬師の目",
+      "cond": {
+        "flag_count": {
+          "prefix": "brewed_",
+          "count": 6
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A45",
+      "name": "図鑑コンプ：敵",
+      "cond": {
+        "flag_count": {
+          "prefix": "met_",
+          "count": 26
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A46",
+      "name": "大商人ドグの友",
+      "cond": {
+        "stat": {
+          "key": "dogTraded",
+          "min": 1000
+        }
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A47",
+      "name": "頂への道",
+      "cond": {
+        "level_any_min": 60
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A48",
+      "name": "極限の九十九",
+      "cond": {
+        "level_any_min": 99
+      },
+      "hidden": false,
+      "weight": 1
+    },
+    {
+      "id": "A49",
+      "name": "六つの希望",
+      "cond": {
+        "cleared_routes_min": 6
+      },
+      "hidden": false,
+      "weight": 5
+    },
+    {
+      "id": "A50",
+      "name": "すべての希望",
+      "cond": {
+        "gallery_endings_min": 22
+      },
+      "hidden": false,
+      "weight": 5
+    },
+    {
+      "id": "H01",
+      "name": "寝る子は育つ",
+      "cond": {
+        "stat": {
+          "key": "rennyNaps",
+          "min": 30
+        }
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H02",
+      "name": "音痴の子守唄",
+      "cond": {
+        "flag": "talk_jinpachi_muni_3_done"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H03",
+      "name": "前髪の向こう",
+      "cond": {
+        "flags_any": [
+          "route_hyu_H6_done",
+          "personal_hyu_5_done"
+        ]
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H04",
+      "name": "言葉は花になる",
+      "cond": {
+        "flag": "route_geru_G5_done"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H05",
+      "name": "王より民",
+      "cond": {
+        "gallery_ending": "ED21"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H06",
+      "name": "次元の手紙",
+      "cond": {
+        "flag": "neo_letter_seen"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H07",
+      "name": "おかえり、ただいま",
+      "cond": {
+        "gallery_ending": "ED22"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H08",
+      "name": "もう一人の首魁",
+      "cond": {
+        "gallery_go": "GO3"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H09",
+      "name": "星降る夜に",
+      "cond": {
+        "flag": "hidden_starry_night_done"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H10",
+      "name": "6さいのたんじょうび",
+      "cond": {
+        "flag": "hidden_muni_birthday_done"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H11",
       "name": "女神の独白",
       "cond": {
         "flag": "ach_goddess_monologue"
       },
       "hidden": true,
-      "_source": "第11巻14-4#12"
+      "weight": 2
+    },
+    {
+      "id": "H12",
+      "name": "深海より生還",
+      "cond": {
+        "flag": "instant_death_blocked"
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H13",
+      "name": "断食の王",
+      "cond": {
+        "stat": {
+          "key": "neoCookFails",
+          "min": 10
+        }
+      },
+      "hidden": true,
+      "weight": 2
+    },
+    {
+      "id": "H14",
+      "name": "完璧な一年",
+      "cond": {
+        "ending": "true",
+        "stats_zero": [
+          "deathsTotal",
+          "kidnapsTotal",
+          "betrayalsTotal",
+          "comaTotal"
+        ]
+      },
+      "hidden": true,
+      "weight": 5
+    },
+    {
+      "id": "H15",
+      "name": "島に愛された者",
+      "cond": {
+        "all_others": true
+      },
+      "hidden": true,
+      "weight": 5
     }
   ]
 }

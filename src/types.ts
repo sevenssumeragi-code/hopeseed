@@ -293,7 +293,26 @@ export interface GameState {
     revived: number; protectSuccess: number;
     sharkKills: number; comaTotal: number;
     dogSpent?: number;                     // ドグ商店での累計支払い（第11巻14-4隠し#10）
+    // ===== M8 実績カウンタ（第15巻19章） =====
+    crits?: number;             // A15 一撃必殺
+    tamed?: number;             // A16 手なずけ
+    persuadedCount?: number;    // A18 説得
+    flawlessWins?: number;      // A19 無傷勝利
+    fleeWins?: number;          // A20 逃走成功
+    cured?: number;             // A26 状態異常治療
+    shallowsSafeReturns?: number; // A27 満潮浅瀬からの生還
+    raidsClean?: number;        // A28 夜襲を裏切りゼロで
+    dreamWins?: number;         // A29 夢魔戦勝利
+    satietyStreak?: number;     // A30 満腹30%以上の連続日数
+    greatCooked?: number;       // A39 おいしいもの
+    dogTraded?: number;         // A46 ドグ取引累計（買+売）
+    rennyNaps?: number;         // H01 レニィの休息
+    neoCookFails?: number;      // H13 ネオの調理失敗
+    deathsTotal?: number;       // H14 累計死亡
+    kidnapsTotal?: number;      // H14 累計誘拐
+    betrayalsTotal?: number;    // H14 累計裏切り
   };
+  lastComaDay?: number;                    // 夢魔遭遇+2%の週判定（第14巻18-7）
   trustDelta?: Record<string, number>;     // その日の信頼度上昇（就寝時の要約表示用・第9巻12-7）
   continued?: boolean;                     // GOからの再開履歴（第11巻14-4隠し#12: ノーコンティニュー）
   achievements: string[];

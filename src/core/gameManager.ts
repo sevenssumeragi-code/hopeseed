@@ -143,7 +143,7 @@ export class GameManager {
       const ed = this.endingJudge.judge();
       this.lastEndingId = ed.id;
       // ネオルートの帰還/残留選択待ちの場合はUIが finalizeEnding() で確定する（第12巻15-4-1）
-      if (!ed.needsNeoChoice) recordGalleryEnding(ed.id);
+      if (!ed.needsNeoChoice) recordGalleryEnding(ed.id, this.gs.holder);
       this.achievements.check(ed.grade);
       return;
     }
@@ -186,11 +186,19 @@ export class GameManager {
     }
     if (raidRate > 0 && this.rng.chance(raidRate)) raid = true;
 
+    // H01「寝る子は育つ」: レニィ保持者での休息（就寝）回数
+    if (this.gs.holder === "renny") {
+      this.gs.stats.rennyNaps = (this.gs.stats.rennyNaps ?? 0) + 1;
+    }
     let dreamer: string | null = null;
     if (this.gs.day >= DB.config.dream.active_from_day) {
       for (const c of this.party.getActiveMembers()) {
         let rate = c.id === "renny" ? DB.config.dream.rate_renny : DB.config.dream.rate_base;
         if (this.gs.flags["nightmare_king_defeated"]) rate *= DB.config.dream.king_defeat_mult;
+        // 直前に昏睡者が出た週は+2%（第14巻18-7・最終値）
+        if (this.gs.lastComaDay !== undefined && this.gs.day - this.gs.lastComaDay <= 7) {
+          rate += DB.config.dream.recent_coma_bonus;
+        }
         if (this.gs.flags["eff_dream_guard"]) rate *= 0.9; // レニィ「眠れない夜」（第2巻: 遭遇率−10%）
         if (this.rng.chance(rate)) { dreamer = c.id; break; } // 一晩に1人
       }
@@ -225,6 +233,9 @@ export class GameManager {
       c.hitDebuff = 0; c.hitDebuffTurns = 0;
       c.protectRateBuff = 0; c.protectRateTurns = 0;
     }
+    // A30「飽食の島」: 全員が満腹30%以上の連続日数
+    const allFed = this.party.getActiveMembers().every((c) => c.satiety >= 30);
+    this.gs.stats.satietyStreak = allFed ? (this.gs.stats.satietyStreak ?? 0) + 1 : 0;
     // 就寝時の絆要約（第9巻12-7:「AとBの絆が深まった気がする」）
     this.lastBondSummary = this.trust.consumeDailySummary();
     this.save.autosave(this.gs);
@@ -359,6 +370,10 @@ export class GameManager {
     }
     const cost = current.costs?.[mapId] ?? 1;
     const wasBase = current.is_base === true;
+    // A27「満潮を制す」: 満潮の浅瀬から誰も失わず離脱（第15巻【AI提案: 移動離脱時に計上】）
+    if (this.gs.location === "shallows" && this.gs.tide === "high") {
+      this.recordShallowsEscape();
+    }
     this.gs.location = mapId;
     this.gs.exploredToday = true;
     this.phase = DB.maps[mapId].is_base ? "base" : "map";
@@ -480,6 +495,26 @@ export class GameManager {
 
     this.gs.stats.sharkKills += result.sharkKills;
 
+    // ===== 実績カウンタ（第15巻19章） =====
+    const st = this.gs.stats;
+    if (result.critOccurred) st.crits = (st.crits ?? 0) + 1;
+    if (result.tameOccurred) st.tamed = (st.tamed ?? 0) + 1;
+    if (result.persuadeOccurred) st.persuadedCount = (st.persuadedCount ?? 0) + 1;
+    if (result.purifyOccurred) this.gs.flags["purify_done"] = true;      // A17
+    if (result.braveSynergy) this.gs.flags["brave_synergy_done"] = true; // A36
+    if (result.instantDeathBlocked) this.gs.flags["instant_death_blocked"] = true; // H12
+    for (const id of result.enemyDefIds) this.gs.flags[`met_${id}`] = true; // A45 図鑑
+    if (result.outcome === "fled") st.fleeWins = (st.fleeWins ?? 0) + 1;  // A20
+    if (result.outcome === "victory" && result.flawless) st.flawlessWins = (st.flawlessWins ?? 0) + 1; // A19
+    st.deathsTotal = (st.deathsTotal ?? 0) + result.deaths.length;        // H14
+    st.kidnapsTotal = (st.kidnapsTotal ?? 0) + result.kidnapped.length;
+    st.betrayalsTotal = (st.betrayalsTotal ?? 0) + result.possessionOccurred.length;
+    // 夜襲を裏切りゼロで撃退（A28。夜襲戦のみ）
+    if (this.nightEventBattle && this.pendingNightRaid
+      && result.outcome === "victory" && result.possessionOccurred.length === 0) {
+      st.raidsClean = (st.raidsClean ?? 0) + 1;
+    }
+
     const tb = DB.config.trust_battle;
     const ids = b.allies.map((a) => a.state.id);
     const allPairs = (amount: number, reason: string) => {
@@ -542,6 +577,7 @@ export class GameManager {
               c.hp = Math.max(1, Math.round(c.maxHp * 0.5));
               // 誘拐からの救出: 救出された者⇔救出戦参加者 +8（第9巻12-3-1）
               for (const mid of ids) this.trust.add(c.id, mid, DB.trust.gain.rescue, "rescue");
+              this.gs.flags["rescued_someone"] = true; // A25「全員奪還」
             }
           }
         }
@@ -593,6 +629,11 @@ export class GameManager {
     return result;
   }
 
+  // 満潮の浅瀬から誰も失わず離脱（A27「満潮を制す」【AI提案: 移動離脱時に計上】）
+  recordShallowsEscape(): void {
+    this.gs.stats.shallowsSafeReturns = (this.gs.stats.shallowsSafeReturns ?? 0) + 1;
+  }
+
   // ============ 看病（第7巻9-4）============
   // 昏睡・感染症の仲間に付き添う。感染症の重症化判定をその日1回スキップ。
   // 看病者はその時間帯行動不可（=1時間帯消費）。
@@ -635,7 +676,8 @@ export class GameManager {
     const price = this.buyPrice(itemId);
     if (price === null || this.gs.silver < price) return false;
     this.gs.silver -= price;
-    this.gs.stats.dogSpent = (this.gs.stats.dogSpent ?? 0) + price; // 累計取引（第11巻14-4 #10）
+    this.gs.stats.dogSpent = (this.gs.stats.dogSpent ?? 0) + price; // 累計支払い（第11巻14-4 #10）
+    this.gs.stats.dogTraded = (this.gs.stats.dogTraded ?? 0) + price; // A46 取引累計
     this.gs.inventory[itemId] = (this.gs.inventory[itemId] ?? 0) + 1;
     return true;
   }
@@ -645,6 +687,7 @@ export class GameManager {
     if (sell == null || (this.gs.inventory[itemId] ?? 0) < 1) return false;
     this.gs.inventory[itemId]--;
     this.gs.silver += sell;
+    this.gs.stats.dogTraded = (this.gs.stats.dogTraded ?? 0) + sell; // A46 取引累計
     return true;
   }
 
@@ -704,6 +747,7 @@ export class GameManager {
     const c = this.gs.party[dreamerId];
     if (result.outcome === "victory") {
       c.hp = Math.min(c.maxHp, c.hp + Math.round(c.maxHp * 0.10));
+      this.gs.stats.dreamWins = (this.gs.stats.dreamWins ?? 0) + 1; // A29「悪夢おことわり」
     } else if (result.outcome === "defeat") {
       c.downed = false;
       c.hp = Math.max(1, c.hp);
@@ -717,8 +761,9 @@ export class GameManager {
   // 回避率 = 40 + 対象の全ペア信頼度合計×0.08(最大+40) + 選択肢(正解+20/中立+10/不正解+0)、上限100
   nightRaidTarget(): string {
     const targets = this.party.getActiveMembers().filter((c) => c.id !== "goddess");
-    // ネオは狙われやすい（第9巻12-5-2注記。係数は第14巻の詳細待ち【AI提案】×1.5）
-    const weights = targets.map((c) => (c.id === "neo" ? 1.5 : 1.0));
+    // 対象選択の重み: ネオ×1.5・保持者×1.3（第14巻18-6・最終値）
+    const weights = targets.map((c) =>
+      (c.id === "neo" ? 1.5 : 1.0) * (c.id === this.gs.holder ? 1.3 : 1.0));
     const total = weights.reduce((s, w) => s + w, 0);
     let roll = this.rng.next() * total;
     for (let i = 0; i < targets.length; i++) {
@@ -738,6 +783,7 @@ export class GameManager {
     }
     const rate = this.trust.betrayalAvoidRate(targetId, grade);
     const avoided = this.rng.chance(rate / 100);
+    if (avoided) this.pendingNightRaid = true; // 夜襲進行中（A28判定用）
     if (!avoided) {
       if (targetId === this.gs.holder) {
         this.triggerGameOver("holder_possess"); // 対象が保持者で失敗=即GO（第9巻12-5-2）
@@ -776,7 +822,13 @@ export class GameManager {
   finalizeEnding(neoChoice?: "return" | "stay"): ReturnType<EndingJudge["judge"]> {
     const ed = this.endingJudge.judge(neoChoice);
     this.lastEndingId = ed.id;
-    if (!ed.needsNeoChoice) recordGalleryEnding(ed.id);
+    if (!ed.needsNeoChoice) {
+      recordGalleryEnding(ed.id, this.gs.holder); // A49 6周判定用にルートも記録
+      if (ed.id === "ED20" && ed.texts.some((t) => t.includes("手紙"))) {
+        this.gs.flags["neo_letter_seen"] = true; // H06「次元の手紙」
+      }
+      this.achievements.check(ed.grade); // ED系実績（A05/H05〜H07/H14等）
+    }
     return ed;
   }
 

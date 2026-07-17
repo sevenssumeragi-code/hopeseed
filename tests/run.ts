@@ -9,7 +9,7 @@ import { FieldState } from "../src/field/field.js";
 import {
   statAtLevel, enhanceStage, enhancedSkill, expToNext, skillsForCharacter,
 } from "../src/core/stats.js";
-import { checksum, readGallery } from "../src/core/saveManager.js";
+import { checksum, readGallery, resetAchievementsStore } from "../src/core/saveManager.js";
 import { pairKey } from "../src/core/trustManager.js";
 
 let passed = 0, failed = 0;
@@ -1761,7 +1761,7 @@ test("[受け入れ基準M7] レニィルート通しプレイ: R1〜R7→首魁
   assert(gm.gs.flags["route_renny_R4_done"], "R4視聴");
   assert(bossFought, "首魁戦発生");
   assert(gm.gs.flags["demon_lord_defeated"], "首魁撃破フラグ");
-  assert(gm.gs.achievements.includes("hope_uneatable"), "実績「希望は喰えない」");
+  assert(gm.gs.achievements.includes("A10"), "実績A10「希望は喰えない」");
   assertEq(gm.phase, "ending", "365日到達");
   const ed = gm.endingJudge.judge();
   assertEq(ed.grade, "true", "真グレード");
@@ -1914,6 +1914,140 @@ test("[ギャラリー] ED・GO演出の回収記録（第12巻15-5/15-7: 周回
   assert(readGallery().endings.length > 0, "周回引き継ぎ");
 });
 
+console.log("[M8] 実績・周回・最終調整（第15巻＋第14巻）");
+
+test("[実績] 全65種のデータ整合＋重み合計（第15巻19-1/19-2/19-3-1）", () => {
+  assertEq(DB.achievements.length, 65, "通常50＋隠し15=65");
+  assertEq(DB.achievements.filter((a: any) => !a.hidden).length, 50, "通常50");
+  assertEq(DB.achievements.filter((a: any) => a.hidden).length, 15, "隠し15");
+  // 重み: 通常1／隠し2／A49・A50・H14・H15=5 → 48×1+13×2+4×5=94
+  const total = DB.achievements.reduce((s: number, a: any) => s + (a.weight ?? (a.hidden ? 2 : 1)), 0);
+  assertEq(total, 94, "全重み合計");
+  for (const id of ["A01", "A50", "H01", "H15"]) {
+    assert(DB.achievements.some((a: any) => a.id === id), `${id}が存在`);
+  }
+});
+
+test("[実績] 解除フロー: 進行系・戦闘系・トーストキュー", () => {
+  resetAchievementsStore(); // 累積を一旦クリアして新規解除の流れを検証
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  assert(gm.gs.achievements.includes("A01"), "A01漂流者たち（開始時）");
+  gm.gs.day = 7;
+  gm.achievements.check();
+  assert(gm.gs.achievements.includes("A02"), "A02最初の七日間");
+  // 戦闘勝利 → A11
+  const b = gm.startBattle(["boar"], ["hyu"]);
+  b.enemies.forEach((e) => { e.hp = 0; e.alive = false; });
+  b.finish();
+  gm.settleBattle();
+  assert(gm.gs.achievements.includes("A11"), "A11はじめての勝利");
+  assert(gm.gs.flags["met_boar"], "図鑑: イノシシ遭遇");
+  const toasts = gm.achievements.consumeToasts();
+  assert(toasts.length > 0, "トーストキューに積まれる");
+  assertEq(gm.achievements.consumeToasts().length, 0, "取り出し後は空");
+});
+
+test("[実績] 周回累積: システムデータに保存されnewGameでも引き継ぐ（第15巻）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.tribute.fireLastDay = 1;
+  gm.gs.inventory["meat"] = 1;
+  gm.tribute.offer("fire", "meat");
+  gm.achievements.check();
+  assert(gm.gs.achievements.includes("A21"), "A21約束の火");
+  // 周回: 新しいゲームでも解除済み
+  const gm2 = new GameManager();
+  gm2.newGame("neo", 43);
+  assert(gm2.gs.achievements.includes("A21"), "周回累積");
+});
+
+test("[実績] 絆系・コレクション系の条件評価", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  gm.gs.trust["jinpachi:renny"] = 85;
+  gm.achievements.check();
+  assert(gm.gs.achievements.includes("A31"), "A31ペア80到達");
+  gm.gs.trust["jinpachi:renny"] = 100;
+  gm.gs.flags["pair_story_completed_jinpachi:renny"] = true;
+  gm.gs.flags["brewed_antidote"] = true;
+  for (const r of ["antidote", "burn_salve", "numb_cure", "plague_cure", "obesity_pill", "infection_cure"]) {
+    gm.gs.flags[`brewed_${r}`] = true;
+  }
+  gm.achievements.check();
+  assert(gm.gs.achievements.includes("A32"), "A32絆の証");
+  assert(gm.gs.achievements.includes("A33"), "A33十五の物語");
+  assert(gm.gs.achievements.includes("A44"), "A44薬師の目（薬6種）");
+});
+
+test("[実績] H15「島に愛された者」: 他64種すべてで解除（19-2）", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  // 64種を直接解除済みに（判定ロジックの検証）
+  for (const a of DB.achievements as any[]) {
+    if (a.id !== "H15" && !gm.gs.achievements.includes(a.id)) gm.gs.achievements.push(a.id);
+  }
+  gm.achievements.check();
+  assert(gm.gs.achievements.includes("H15"), "プラチナ解除");
+  assertEq(gm.achievements.completionRate(), 100, "島の記録100%");
+});
+
+test("[第14巻18-1] レベル曲線の実測検証: EXP収支でLv62前後に到達", () => {
+  // Lv62到達に必要な累計EXP ≈ 385,000（第5巻式 15×Lv^1.7 の総和）
+  let cum = 0;
+  for (let lv = 1; lv < 62; lv++) cum += expToNext(lv);
+  assert(cum > 350000 && cum < 420000, `累計EXP検算（実測${Math.round(cum)}）`);
+  // 210探索日×2.5戦闘×平均730EXP ≈ 383,000 を注ぎ込むとLv58〜66に収まる
+  const totalExp = 210 * 2.5 * 730;
+  let lv = 1, pool = totalExp;
+  while (lv < 99 && pool >= expToNext(lv)) { pool -= expToNext(lv); lv++; }
+  assert(lv >= 58 && lv <= 66, `想定進行でLv${lv}（目標62±4）`);
+});
+
+test("[第14巻] 最終チューニング値の一致（18-6/18-7/18-9/18-12）", () => {
+  // 夜襲率 8%→12%→15%
+  assertEq(JSON.stringify(DB.config.night_raid.phases), JSON.stringify([[61, 0.08], [200, 0.12], [301, 0.15]]), "夜襲3段階");
+  // 夢魔 2%/5%・昏睡週+2%・王撃破で半減
+  assertEq(DB.config.dream.rate_base, 0.02, "夢魔2%");
+  assertEq(DB.config.dream.rate_renny, 0.05, "レニィ5%");
+  assertEq(DB.config.dream.recent_coma_bonus, 0.02, "昏睡週+2%");
+  // 誘拐10%・取り憑き25/35%
+  assertEq(DB.config.kidnap.rate, 0.10, "誘拐10%");
+  assertEq(DB.config.possess.rate_base, 0.25, "取り憑き25%");
+  assertEq(DB.config.possess.rate_boss, 0.35, "強憑依35%");
+  // 天候（春）: 晴50/曇20/雨15/嵐5/霧8/灰2
+  const spring = (DB.weather.seasons as any[]).find((s) => s.name === "spring");
+  assertEq(spring.weights.clear, 50, "春晴50");
+  assertEq(spring.weights.storm, 5, "春嵐5");
+  // 漂着物: 木材40%
+  const wood = (DB.config.field.drift_table as any[]).find((d) => d.item === "wood");
+  assertEq(wood.weight, 40, "漂着木材40");
+  // 満腹: −15/−20/+40
+  assertEq(DB.config.hunger.decay_per_day, 15, "満腹−15");
+  assertEq(DB.config.hunger.decay_per_day_explore, 20, "探索−20");
+  assertEq(DB.config.hunger.meal_restore, 40, "食事+40");
+});
+
+test("[第14巻18-7] 昏睡週の夢魔遭遇+2%が配線されている", () => {
+  const origBase = DB.config.dream.rate_base;
+  (DB.config.dream as any).rate_base = 0; // 基礎0にして+2%だけを検証
+  try {
+    const gm = new GameManager();
+    gm.newGame("geru", 42);
+    gm.gs.day = 150;
+    gm.gs.lastComaDay = 148; // 2日前に昏睡発生
+    let hits = 0;
+    for (let i = 0; i < 2000; i++) {
+      const ev = gm.rollNightEvents();
+      if (ev.dreamer) hits++;
+    }
+    // 6人×2% ≈ 11%前後/夜。0なら未配線
+    assert(hits > 50, `昏睡週ボーナスが有効（${hits}/2000）`);
+  } finally {
+    (DB.config.dream as any).rate_base = origBase;
+  }
+});
+
 console.log("[M2] 365日通し");
 
 test("供物・食事を続ければ365日到達→EndingJudge", () => {
@@ -1925,7 +2059,7 @@ test("供物・食事を続ければ365日到達→EndingJudge", () => {
   }
   assertEq(gm.phase, "ending", `365日到達(day=${gm.gs.day},phase=${gm.phase})`);
   assertEq(gm.gs.day, 365, "day=365");
-  assert(gm.gs.achievements.includes("survivor_365"), "1年生存実績");
+  assert(gm.gs.achievements.includes("A05"), "実績A05「一年目の朝」");
 });
 
 console.log("");

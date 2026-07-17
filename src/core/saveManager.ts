@@ -15,21 +15,47 @@ function storeGet(key: string): string | null {
   return memStore.get(key) ?? null;
 }
 
-// ギャラリー（ED回収・GO閲覧。周回でも引き継ぐ・第12巻15-5/15-7）
-export interface GalleryData { endings: string[]; goSeen: string[]; }
+// ギャラリー（ED回収・GO閲覧・クリアルート。周回でも引き継ぐ・第12巻15-5/15-7）
+export interface GalleryData { endings: string[]; goSeen: string[]; clearedRoutes?: string[]; }
 
 export function readGallery(): GalleryData {
   try {
     const raw = storeGet("hopeseed_gallery");
     if (raw) return JSON.parse(raw) as GalleryData;
   } catch { /* 破損時は初期化 */ }
-  return { endings: [], goSeen: [] };
+  return { endings: [], goSeen: [], clearedRoutes: [] };
 }
 
-export function recordGalleryEnding(id: string): void {
+export function recordGalleryEnding(id: string, route?: string): void {
   const g = readGallery();
   if (!g.endings.includes(id)) g.endings.push(id);
+  if (route) {
+    g.clearedRoutes ??= [];
+    if (!g.clearedRoutes.includes(route)) g.clearedRoutes.push(route);
+  }
   storeSet("hopeseed_gallery", JSON.stringify(g));
+}
+
+// 実績（第15巻19章: 周回をまたいで累積。セーブとは別のシステムデータ＝第13巻17-5）
+export function readUnlockedAchievements(): string[] {
+  try {
+    const raw = storeGet("hopeseed_achievements");
+    if (raw) return JSON.parse(raw) as string[];
+  } catch { /* 破損時は初期化 */ }
+  return [];
+}
+
+export function persistAchievement(id: string): void {
+  const list = readUnlockedAchievements();
+  if (!list.includes(id)) {
+    list.push(id);
+    storeSet("hopeseed_achievements", JSON.stringify(list));
+  }
+}
+
+// テスト用: 実績システムデータのみ初期化（ギャラリーは対象外）
+export function resetAchievementsStore(): void {
+  storeSet("hopeseed_achievements", JSON.stringify([]));
 }
 
 export function recordGalleryGO(id: string): void {

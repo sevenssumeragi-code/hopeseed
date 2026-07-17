@@ -121,6 +121,13 @@ export class CraftManager {
 
     if (type === "cook") {
       this.gs.stats.cooked++;
+      if (grade === "great") {
+        this.gs.stats.greatCooked = (this.gs.stats.greatCooked ?? 0) + 1; // A39
+        this.gs.flags[`great_cook_${recipe.id}`] = true;                  // A40 島の三ツ星
+      }
+      if (grade === "fail" && crafterId === "neo") {
+        this.gs.stats.neoCookFails = (this.gs.stats.neoCookFails ?? 0) + 1; // H13 断食の王
+      }
       const quality: FoodQuality = grade === "great" ? "great" : grade === "success" ? "normal" : "poor";
       this.gs.foodStock.push({ dishId: recipe.result, quality, madeDay: this.gs.day });
       const label = quality === "great"
@@ -138,6 +145,10 @@ export class CraftManager {
       }
       this.gs.inventory[recipe.result] = (this.gs.inventory[recipe.result] ?? 0) + 1;
       this.gs.stats.built++;
+      if (DB.items[recipe.result]?.category === "weapon") {
+        this.gs.flags["weapon_built"] = true;                           // A41 鍛冶はじめ
+        if (recipe.id.endsWith("_t4")) this.gs.flags[`built_${recipe.id}`] = true; // A42/A43 T4
+      }
       if (grade === "great" && recipe.inputs.length > 0) {
         const back = recipe.inputs[0];
         this.gs.inventory[back.item] = (this.gs.inventory[back.item] ?? 0) + 1;
@@ -153,6 +164,7 @@ export class CraftManager {
     }
     const count = grade === "great" ? 2 : 1;
     this.gs.inventory[recipe.result] = (this.gs.inventory[recipe.result] ?? 0) + count;
+    this.gs.flags[`brewed_${recipe.result}`] = true;                    // A44 薬師の目
     return {
       ok: true, grade,
       message: grade === "great"

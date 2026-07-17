@@ -67,6 +67,15 @@ export interface BattleResult {
   sharkKills: number;
   possessionOccurred: string[]; // 戦闘中に取り憑きが成立したキャラ（第9巻12-3-2: −3全ペア）
   betrayedAttacks: [string, string][];      // 裏切りキャラの攻撃 attacker→target（第9巻12-3-2: −1/回）
+  // ===== M8 実績用（第15巻19章） =====
+  critOccurred: boolean;        // A15 一撃必殺の発動
+  tameOccurred: boolean;        // A16 手なずけ成功
+  purifyOccurred: boolean;      // A17 光属性での浄化成功
+  persuadeOccurred: boolean;    // A18 説得成功
+  flawless: boolean;            // A19 誰もダメージを受けていない
+  braveSynergy: boolean;        // A36 勇気の歌シナジー
+  instantDeathBlocked: boolean; // H12 引き込みを庇うで無効化
+  enemyDefIds: string[];        // A45 図鑑（遭遇記録）
 }
 
 // ペア恒久ボーナス（第11巻: 第5話=庇う+5%／庇う特別2段=+5%／3段=被ダメ−10%）
@@ -139,6 +148,13 @@ export class BattleManager {
   private protectSuccessPairs: [string, string][] = [];
   private possessionOccurred: string[] = [];
   private betrayedAttacks: [string, string][] = [];
+  private critOccurred = false;
+  private tameOccurred = false;
+  private purifyOccurred = false;
+  private persuadeOccurred = false;
+  private allyDamaged = false;
+  private braveSynergy = false;
+  private instantDeathBlocked = false;
   private pairPerk: PairPerkFn = () => ({ protect: 0, dmgCut: 0 });
   private flagGet: (k: string) => boolean = () => false;
 
@@ -506,6 +522,7 @@ export class BattleManager {
         if (this.rng.chance(tameRate(this.allyEffSkl(a.state)) / 100)) {
           target.tamedTurns = DB.config.tame.turns
             + (this.flagGet("eff_tame_extend") ? 1 : 0); // 第2巻「手負いの狼」
+          this.tameOccurred = true; // A16「猛獣の友」
           this.log.push("tame_ok", { b: target.def.name });
         } else {
           this.log.push("tame_ng", { b: target.def.name });
@@ -520,6 +537,7 @@ export class BattleManager {
         if (this.rng.chance(rate / 100)) {
           target.betrayed = false;
           this.persuadedIds.push(target.state.id);
+          this.persuadeOccurred = true; // A18「声よ届け」
           this.log.push("persuade_ok", { a: name, b: DB.characters[target.state.id].name });
         } else {
           this.log.push("persuade_ng", { a: name });
@@ -547,7 +565,7 @@ export class BattleManager {
         // 光属性技を裏切り味方へ→浄化判定（第4巻5-9: 基礎60%・ダメージなし）
         const betrayedTarget = this.allies.find((x) => x.state.id === cmd.targetAllyId && x.betrayed);
         if (betrayedTarget && this.isLightSkill(skill)) {
-          if (this.rng.chance(DB.config.purify_rate)) {
+          if (this.rng.chance(DB.config.purify_rate) && (this.purifyOccurred = true)) {
             betrayedTarget.betrayed = false;
             this.persuadedIds.push(betrayedTarget.state.id);
             this.log.push("purify", { b: DB.characters[betrayedTarget.state.id].name });
@@ -618,6 +636,7 @@ export class BattleManager {
       const critRate = effectiveStat(a.state, "crit") + critBonus;
       if (this.rng.chance(critRate / 100)) {
         target.hp = 0; target.alive = false;
+        this.critOccurred = true; // A15「急所の芸術」
         this.log.push("critical", { b: target.def.name });
         return;
       }
@@ -694,6 +713,7 @@ export class BattleManager {
       this.braveSongTurn[a.state.id] = this.turn;
       if (this.braveSongTurn["geru"] === this.turn && this.braveSongTurn["muni"] === this.turn) {
         synergyStage = 1;
+        this.braveSynergy = true; // A36「みんなのうた」
         this.log.push("brave_song_synergy");
       }
     }
@@ -832,6 +852,7 @@ export class BattleManager {
         this.basicAttackSkill(b.state.id), this.dmgCtx({ protectedTarget: isProtected }))
       * this.allyDamageCutMult(target)));
     target.state.hp -= dmg;
+    this.allyDamaged = true;
     this.log.push("damage", { b: tName, v: dmg });
     if (target.state.hp <= 0) this.markDowned(target);
   }
@@ -1143,6 +1164,7 @@ export class BattleManager {
         const rennyImmune = target.state.id === "renny";
         const guarded = instant.guard_negates && target.guarding;
         if (rennyImmune || isProtected || guarded) {
+          if (isProtected) this.instantDeathBlocked = true; // H12「深海より生還」
           this.log.push("instant_death_resist", { b: tName });
         } else if (this.ctx.waterGraceActive && !this.waterGraceUsed) {
           this.waterGraceUsed = true;
@@ -1190,6 +1212,7 @@ export class BattleManager {
               skill as unknown as Skill, this.dmgCtx({ protectedTarget: isProtected }))
             * this.allyDamageCutMult(target) * trailGuard));
           target.state.hp -= dmg;
+          this.allyDamaged = true;
           total += dmg;
           this.log.push("damage", { b: tName, v: dmg });
           if (target.state.hp <= 0) this.markDowned(target);
@@ -1338,6 +1361,14 @@ export class BattleManager {
       sharkKills: 0,
       possessionOccurred: [...this.possessionOccurred],
       betrayedAttacks: [...this.betrayedAttacks],
+      critOccurred: this.critOccurred,
+      tameOccurred: this.tameOccurred,
+      purifyOccurred: this.purifyOccurred,
+      persuadeOccurred: this.persuadeOccurred,
+      flawless: !this.allyDamaged,
+      braveSynergy: this.braveSynergy,
+      instantDeathBlocked: this.instantDeathBlocked,
+      enemyDefIds: [...new Set(this.enemies.map((e) => e.defId))],
     };
     if (this.hopeDevoured) result.goReason = "holder_possess";
 
@@ -1386,7 +1417,9 @@ export class BattleManager {
         if (e.alive) continue;
         if (e.defId === "shark") result.sharkKills++;
         for (const d of e.def.drops) {
-          if (this.rng.chance(d.rate)) {
+          // ゲル保持者「マルチタスク」: ドロップ判定+5%（第14巻18-3【AI提案】）
+          const rate = d.rate + (this.holderId === "geru" ? 0.05 : 0);
+          if (this.rng.chance(rate)) {
             const item = d.item === "herb_random"
               ? this.rng.pick(["herb_red", "herb_blue", "herb_green", "herb_yellow"])
               : d.item;

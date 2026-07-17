@@ -34,6 +34,7 @@ export class StatusEffectManager {
         c.comaDaysLeft = this.rng.int(t.coma_recover_min_days, t.coma_recover_max_days);
         c.exclusion = "coma";
         this.gs.stats.comaTotal++;
+        this.gs.lastComaDay = this.gs.day; // 夢魔遭遇+2%の週判定（第14巻18-7）
         break;
       case "betrayal":
         c.exclusion = "betrayal";
@@ -47,6 +48,15 @@ export class StatusEffectManager {
     const c = this.gs.party[charId];
     if (!c) return;
     const st = c.status;
+    // 実際に治療が成立した回数を数える（A26「名医の島」・第15巻）
+    const had = (effect === "poison" && st.poison !== undefined)
+      || (effect === "burn" && st.burn !== undefined)
+      || (effect === "bleed" && st.bleed !== undefined)
+      || (effect === "paralysis" && st.paralysis !== undefined)
+      || (effect === "plague" && st.plagueDay !== undefined)
+      || (effect === "infection" && st.infectDay !== undefined)
+      || (effect === "obesity" && st.obesity === true);
+    if (had) this.gs.stats.cured = (this.gs.stats.cured ?? 0) + 1;
     if (effect === "poison") delete st.poison;
     else if (effect === "burn") delete st.burn;
     else if (effect === "bleed") delete st.bleed;

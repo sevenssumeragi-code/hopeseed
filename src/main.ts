@@ -7,6 +7,7 @@ import { skillsForCharacter, enhancedSkill, statAtLevel } from "./core/stats.js"
 import { FieldState, type FieldSymbol } from "./field/field.js";
 import { rulebookText } from "./ui/rulebook.js";
 import { readGallery } from "./core/saveManager.js";
+import { globalCompletionRate } from "./core/achievementManager.js";
 import type { BattleManager, Command } from "./core/battle/battleManager.js";
 import type { CharacterState } from "./types.js";
 
@@ -71,8 +72,29 @@ function trustHearts(v: number): string {
   return `${"♥".repeat(Math.min(5, full))}${"♡".repeat(Math.max(0, 5 - full))} ${Math.round(v)} ${label}`;
 }
 
+// 実績解除トースト（第15巻19章: 画面右上に表示）
+function showAchievementToasts(): void {
+  if (!gm.gs || !gm.achievements) return;
+  for (const id of gm.achievements.consumeToasts()) {
+    const a = (DB.achievements as any[]).find((x) => x.id === id);
+    if (!a) continue;
+    let wrap = document.querySelector(".toast-wrap") as HTMLElement | null;
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.className = "toast-wrap";
+      document.body.appendChild(wrap);
+    }
+    const t = document.createElement("div");
+    t.className = "toast";
+    t.textContent = `🏆 実績解除「${a.name}」`;
+    wrap.appendChild(t);
+    setTimeout(() => t.remove(), 4000);
+  }
+}
+
 // ============ HUD ============
 function renderHUD(): void {
+  showAchievementToasts();
   const el = $("#hud");
   if (!gm.gs) { el.innerHTML = ""; return; }
   const slotNames: Record<string, string> = { morning: "朝", noon: "昼", evening: "夕", night: "夜" };
@@ -246,11 +268,19 @@ function showJournal(): void {
   const events = j.events.slice(-10).map((e) =>
     `<li>Day${e.day}: ${e.id}</li>`).join("");
   const todayLog = logBuffer.slice(-8).map((l) => `<li>${l}</li>`).join("");
+  // 実績ページ（第15巻: 通常50＋隠し15。隠しは解除まで？？？）
+  const achRows = (DB.achievements as any[]).map((a) => {
+    const got = gm.gs.achievements.includes(a.id);
+    const name = got ? a.name : (a.hidden ? "？？？" : a.name);
+    return `<tr><td>${a.id}</td><td>${name}</td><td>${got ? "🏆" : ""}</td></tr>`;
+  }).join("");
   showModal("📓 日誌", `
     <h3 class="section-title">供物の記録</h3><ul>${tributes || "<li>まだない</li>"}</ul>
     <h3 class="section-title">蘇生の記録</h3><ul>${revives || "<li>まだない</li>"}</ul>
     <h3 class="section-title">出来事</h3><ul>${events || "<li>まだない</li>"}</ul>
-    <h3 class="section-title">本日のログ</h3><ul style="font-size:12px">${todayLog}</ul>`);
+    <h3 class="section-title">本日のログ</h3><ul style="font-size:12px">${todayLog}</ul>
+    <h3 class="section-title">実績（島の記録: ${gm.achievements.completionRate()}%）</h3>
+    <div style="max-height:240px;overflow-y:auto"><table class="data"><tr><th>ID</th><th>名称</th><th></th></tr>${achRows}</table></div>`);
 }
 
 // セーブ/ロード画面（第13巻17-2/17-3: オート3+手動10=13スロット・メタ表示）
@@ -297,8 +327,9 @@ function renderTitle(): void {
   cancelAnimationFrame(fieldRAF);
   screen().innerHTML = `
     <div class="screen-inner">
-      <h1 class="title-logo">ホープシード</h1>
+      <h1 class="title-logo">${globalCompletionRate() >= 100 ? "🌸" : ""}ホープシード${globalCompletionRate() >= 100 ? "🌸" : ""}</h1>
       <p class="subtitle">～無人島サバイバルRPG～</p>
+      <p class="subtitle" style="font-size:12px">島の記録: ${globalCompletionRate()}%${globalCompletionRate() >= 100 ? "（満開）" : ""}</p>
       <div class="menu-list">
         <button id="btn-new">はじめから</button>
         <button id="btn-load">つづきから</button>
@@ -325,7 +356,7 @@ function renderTitle(): void {
     const goRows = Object.keys(goNames).map((id) =>
       `<tr><td>${id}</td><td>${g.goSeen.includes(id) ? goNames[id] : "？？？"}</td><td>${g.goSeen.includes(id) ? "✅" : ""}</td></tr>`).join("");
     showModal("🖼️ ギャラリー",
-      `エンディング回収: ${g.endings.length}/22\n<table class="data"><tr><th>ID</th><th>名称</th><th></th></tr>${rows}</table>\n\nゲームオーバー演出: ${g.goSeen.length}/5\n<table class="data"><tr><th>ID</th><th>名称</th><th></th></tr>${goRows}</table>`);
+      `島の記録: ${globalCompletionRate()}%\nエンディング回収: ${g.endings.length}/22\n<table class="data"><tr><th>ID</th><th>名称</th><th></th></tr>${rows}</table>\n\nゲームオーバー演出: ${g.goSeen.length}/5\n<table class="data"><tr><th>ID</th><th>名称</th><th></th></tr>${goRows}</table>`);
   };
 }
 
