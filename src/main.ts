@@ -113,19 +113,23 @@ function renderHUD(): void {
     <div class="hud-item"><span class="hud-label">銀貨</span><span class="hud-value">${gm.gs.silver}</span></div>
     <div class="hud-item"><span class="hud-label">炎の供物</span><span class="hud-value ${fireLeft <= 3 ? "warn" : ""}">あと${fireLeft}日</span></div>
     <div class="hud-item"><span class="hud-label">水の供物</span><span class="hud-value ${waterLeft <= 3 ? "warn" : ""}">あと${waterLeft}日</span></div>
-    <div class="hud-item"><button class="small" id="btn-rulebook">📖 ルール</button></div>
+    <div class="hud-item"><button class="small" id="btn-rulebook">📖 ルール${rulebookMilestones() > (gm.gs.rulebookSeen ?? 1) ? '<span style="color:var(--accent)">！</span>' : ""}</button></div>
     <div class="hud-item"><button class="small" id="btn-status">👥 なかま</button></div>
     <div class="hud-item"><button class="small" id="btn-items">🎒 アイテム</button></div>
     <div class="hud-item"><button class="small" id="btn-journal">📓 日誌</button></div>
     <div class="hud-item"><button class="small" id="btn-save">💾 セーブ/ロード</button></div>
     <div class="hud-party">${partyMiniBars()}</div>
   `;
-  $("#btn-rulebook").onclick = () => showModal("ルールブック", rulebookText({
-    fireLeft: gm.tribute.remainingDays("fire"),
-    waterLeft: gm.tribute.remainingDays("water"),
-    reviveIn: gm.gs.reviveLastDay === 0 ? 0
-      : DB.config.revive.cooldown_days - (gm.gs.day - gm.gs.reviveLastDay),
-  }));
+  $("#btn-rulebook").onclick = () => {
+    gm.gs.rulebookSeen = rulebookMilestones(); // ！通知の既読化（第1巻1-7）
+    renderHUD(); // バッジを即時消去
+    showModal("ルールブック", rulebookText({
+      fireLeft: gm.tribute.remainingDays("fire"),
+      waterLeft: gm.tribute.remainingDays("water"),
+      reviveIn: gm.gs.reviveLastDay === 0 ? 0
+        : DB.config.revive.cooldown_days - (gm.gs.day - gm.gs.reviveLastDay),
+    }));
+  };
   $("#btn-status").onclick = () => showPartyStatus();
   $("#btn-items").onclick = () => showInventory();
   $("#btn-journal").onclick = () => showJournal();
@@ -360,18 +364,35 @@ function renderTitle(): void {
   };
 }
 
+// プロローグ（第1巻2-1「漂流の経緯」準拠）
 function renderPrologue(): void {
+  const island = DB.config.ISLAND_NAME;
   screen().innerHTML = `
-    <div class="screen-inner" style="max-width:760px;margin:0 auto;padding-top:60px;line-height:2.2">
-      <p>嵐の夜、船は砕けた。</p>
-      <p>気がつくと、6人は見知らぬ島の湖のほとりに打ち上げられていた。</p>
-      <p>そして誰かの手の中に、淡く光る種がひとつ——<b style="color:var(--accent)">ホープシード</b>。</p>
-      <p>「その種を持つ者が生きる限り、仲間の魂は何度でも呼び戻せる」</p>
-      <p>湖の女神はそう告げた。だが、種を持つ者が失われれば、すべてが終わる。</p>
-      <p>365日。救援が来るまでの1年を、この島で生き延びなければならない。</p>
-      <div class="menu-list" style="margin-top:32px"><button id="btn-next">ホープシードを託す仲間を選ぶ</button></div>
+    <div class="screen-inner" style="max-width:760px;margin:0 auto;padding-top:48px;line-height:2.2">
+      <p>嵐の夜、客船は砕けた。</p>
+      <p>同じ船に乗り合わせた5人は、ばらばらに波へ投げ出され——</p>
+      <p>幼いムニは、その腕から両親が引き離されるのを見た。</p>
+      <p>気がつくと、そこは地図に載らない絶海の孤島<b>「${island}」</b>。湖のほとりだった。</p>
+      <p>そしてもう一人。空の裂け目から落ちてきた金色の魔法剣士が、6人目としてそこにいた。</p>
+      <p>瀕死の6人の前に、湖の女神が現れ、淡く光る種を差し出す——<b style="color:var(--accent)">ホープシード</b>。</p>
+      <p>「これを託された者が生きる限り、あなたたちの命の灯は消えない」</p>
+      <p>だが、種を持つ者が失われれば、その瞬間すべてが終わる。</p>
+      <p>365日。海流が変わり救援の可能性が開けるまでの1年を、この島で生き延びなければならない。</p>
+      <div class="menu-list" style="margin-top:28px"><button id="btn-next">ホープシードを託す仲間を選ぶ</button></div>
     </div>`;
   $("#btn-next").onclick = renderHolderSelect;
+}
+
+// ルールブックの新要素解禁マイルストーン（第1巻1-7【AI提案】: 解禁時に「！」通知）
+function rulebookMilestones(): number {
+  let n = 1; // 基本ルール
+  if (gm.gs.tribute.fireCount + gm.gs.tribute.waterCount > 0) n++; // 供物を初奉納
+  if (gm.gs.day >= DB.config.kidnap.pirate_active_from_day) n++;   // 海賊出現(40日)
+  if (gm.gs.day >= (DB.config.night_raid.phases as [number, number][])[0][0]) n++; // 悪魔の夜襲(61日)
+  if (gm.gs.day >= DB.config.dream.active_from_day) n++;           // 夢魔(100日)
+  if (gm.gs.stats.revived > 0) n++;                                 // 初蘇生
+  if (gm.gs.flags["goddess_joined"]) n++;                           // 女神加入
+  return n;
 }
 
 // ============ HolderSelect ============

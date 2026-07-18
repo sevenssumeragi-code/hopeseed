@@ -15,7 +15,9 @@ export function rulebookText(live?: RulebookLive): string {
   const reviveNow = live?.reviveIn === undefined ? ""
     : live.reviveIn <= 0 ? "　★現在: 祈り可能" : `　★現在: あと${live.reviveIn}日で祈り可能`;
 
-  return `【① ホープシードの掟】
+  return `——${c.ISLAND_NAME} 生存の手引き——
+
+【① ホープシードの掟】
 ・保持者が生きている限り、仲間は死んでも蘇生できる（湖の女神の祠で${c.revive.cooldown_days}日に1人）。
 ・保持者が「死亡」「誘拐」「悪魔に取り憑かれる」と、その瞬間すべてが終わる。
 ・保持者は最初に選んだら最後まで変わらない。
@@ -76,5 +78,6 @@ export function rulebookText(live?: RulebookLive): string {
 ・就寝時・移動時・戦闘後・ボス戦直前に自動でセーブされる（3世代）。
 ・手動セーブは10スロット。
 ・ゲームオーバーになっても、直前のオートセーブから再開できる（最大で1日分の巻き戻し）。
-これがこの島の掟。${c.DAY_MAX}日を生き延びれば、きっと道は開ける。`;
+これが${c.ISLAND_NAME}の掟。${c.DAY_MAX}日を生き延びれば、きっと道は開ける。
+（新たな脅威が現れるたび、この手引きは書き足されていく）`;
 }

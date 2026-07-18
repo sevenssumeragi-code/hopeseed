@@ -11,6 +11,7 @@ import {
 } from "../src/core/stats.js";
 import { checksum, readGallery, resetAchievementsStore } from "../src/core/saveManager.js";
 import { pairKey } from "../src/core/trustManager.js";
+import { rulebookText } from "../src/ui/rulebook.js";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -2046,6 +2047,31 @@ test("[第14巻18-7] 昏睡週の夢魔遭遇+2%が配線されている", () =>
   } finally {
     (DB.config.dream as any).rate_base = origBase;
   }
+});
+
+console.log("[第1巻] ゲーム概要・世界観");
+
+test("[第1巻2-1] 島名ソラリス島がconfig一元管理でルールブックに反映", () => {
+  assertEq(DB.config.ISLAND_NAME, "ソラリス島", "島名（仮名・一括変更可能）");
+  const text = rulebookText();
+  assert(text.includes("ソラリス島 生存の手引き"), "ルールブック表題");
+  assert(text.includes("これがソラリス島の掟"), "結びの一文");
+});
+
+test("[第1巻1-3/2-4] コアループとホープシードの掟の整合", () => {
+  const gm = new GameManager();
+  gm.newGame("renny", 42);
+  // 保持者=マップ操作キャラ・攻撃不可・GO条件（2-4の制約が全て有効）
+  const b = gm.startBattle(["boar"], ["renny", "geru"]);
+  const cmds = b.availableCommands("renny");
+  assert(!cmds.includes("attack") && !cmds.includes("skill"), "保持者は攻撃/技不可");
+  assert(cmds.includes("guard") && cmds.includes("protect"), "防御・庇うは可能");
+  gm.settleBattle();
+  // 能力の切り替え: 非保持者は戦闘中能力（ゲル統率）、保持者は戦闘外能力
+  const gm2 = new GameManager();
+  gm2.newGame("geru", 42);
+  assert(gm2.craft.aptitude("pharmacy", "geru") >= 90 + DB.config.craft.geru_holder_bonus,
+    "ゲル保持者=マルチタスク（戦闘外能力）が有効");
 });
 
 console.log("[M2] 365日通し");

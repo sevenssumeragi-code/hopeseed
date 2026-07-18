@@ -313,6 +313,7 @@ export interface GameState {
     betrayalsTotal?: number;    // H14 累計裏切り
   };
   lastComaDay?: number;                    // 夢魔遭遇+2%の週判定（第14巻18-7）
+  rulebookSeen?: number;                   // ルールブックの既読マイルストーン数（第1巻1-7「！」通知）
   trustDelta?: Record<string, number>;     // その日の信頼度上昇（就寝時の要約表示用・第9巻12-7）
   continued?: boolean;                     // GOからの再開履歴（第11巻14-4隠し#12: ノーコンティニュー）
   achievements: string[];

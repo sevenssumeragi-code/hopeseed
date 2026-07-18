@@ -1,5 +1,7 @@
 {
   "_source": "第14巻18-12(config原本)+第4巻(戦闘正本)+第0巻0-5+第16巻20-8。全キー正データ。",
+  "ISLAND_NAME": "ソラリス島",
+  "_island_name_source": "第1巻2-1【AI提案・仮名】。名称変更時はこのキーのみ修正すれば全画面に反映",
   "DAY_MAX": 365,
   "PARTY_MAX": 6,
   "PARTY_MAX_WITH_HIDDEN": 7,
