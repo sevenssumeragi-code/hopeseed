@@ -5,13 +5,30 @@ GDD（ゲームデザインドキュメント）第0巻・第16巻を「憲法�
 
 ## 遊び方
 
+### いちばん簡単（ビルド済みファイルをダブルクリック）
+
 ```bash
 npm install
-npm run dev      # http://localhost:5173 で起動
+npm run build    # dist/index.html を自己完結型の単一HTMLとして生成
 ```
+
+生成された **`dist/index.html`** をブラウザで開くだけで遊べます（ダブルクリック＝`file://`
+でも動作。JS/CSSはHTMLへインライン化済みなので追加のサーバー不要）。
+
+### 開発サーバー（ホットリロード）
+
+```bash
+npm run dev      # http://localhost:5173 で起動
+npm run preview  # ビルド結果を http://localhost:4173 で配信して確認
+```
+
+### 操作
 
 - 矢印キー / WASD：フィールド移動（保持者キャラを操作）
 - 敵シンボル接触で戦闘、🌿等で採取、🚩で隣接マップへ、⛩️で供物を捧げる
+
+> **メモ**：`dist/index.html` は `base: "./"` ＋ ビルド後インライン化（`scripts/inline.mjs`）
+> により、`file://` 直接オープン・任意のサブパス配信のどちらでも真っ黒にならず起動します。
 
 ## 開発
 
