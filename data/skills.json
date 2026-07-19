@@ -31,7 +31,7 @@
   "jinpachi_12": {"name":"怒涛連撃","owner":"jinpachi","learn_lv":47,"kind":"physical","target":"enemy_single","accuracy":80,"power":0.9,"hits":4,"sp_cost":22,"effects":[],"desc":"怒涛のように止まらない四連撃"},
   "jinpachi_13": {"name":"豪炎爆砕","owner":"jinpachi","learn_lv":52,"kind":"physical","target":"enemy_single","accuracy":75,"power":3.5,"hits":1,"sp_cost":23,"effects":[{"type":"burn","chance":0.50}],"desc":"豪炎とともにすべてを爆砕する"},
   "jinpachi_14": {"name":"魂の拳","owner":"jinpachi","learn_lv":57,"kind":"physical","target":"enemy_single","accuracy":90,"power":3.6,"hits":1,"sp_cost":24,"effects":[{"type":"hp_scaling","mode":"missing","mult":1.0}],"desc":"命を燃やし、魂を乗せて撃ち抜く拳"},
-  "jinpachi_15": {"name":"覇王撃","owner":"jinpachi","learn_lv":60,"kind":"physical","target":"enemy_single","accuracy":70,"power":3.8,"hits":1,"sp_cost":25,"effects":[],"desc":"俺様こそが覇王——全霊の最大奥義"},
+  "jinpachi_15": {"name":"覇王撃","owner":"jinpachi","learn_lv":60,"kind":"physical","target":"enemy_single","accuracy":70,"power":3.8,"hits":1,"sp_cost":25,"effects":[],"desc":"俺こそが覇王——全霊の最大奥義"},
 
   "hyu_01": {"name":"影斬り","owner":"hyu","learn_lv":1,"kind":"physical","target":"enemy_single","accuracy":100,"power":0.8,"hits":1,"sp_cost":3,"effects":[{"type":"night_bonus","mult":1.25}],"desc":"影に紛れた美しい斬撃。夜に冴える"},
   "hyu_02": {"name":"毒刃","owner":"hyu","learn_lv":4,"kind":"physical","target":"enemy_single","accuracy":90,"power":1.2,"hits":1,"sp_cost":5,"effects":[{"type":"poison","chance":0.30}],"desc":"毒を塗った刃でじわりと蝕む"},

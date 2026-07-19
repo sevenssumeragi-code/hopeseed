@@ -57,7 +57,7 @@
   },
   "jinpachi": {
     "name": "ジンパチ",
-    "pronoun": "俺様",
+    "pronoun": "俺",
     "base": {
       "hp": 50,
       "sp": 10,
@@ -153,7 +153,7 @@
   },
   "muni": {
     "name": "ムニ",
-    "pronoun": "わたし",
+    "pronoun": "ムニ",
     "base": {
       "hp": 30,
       "sp": 12,
@@ -199,7 +199,7 @@
   },
   "geru": {
     "name": "ゲル",
-    "pronoun": "オレ",
+    "pronoun": "私",
     "base": {
       "hp": 40,
       "sp": 16,
@@ -247,7 +247,7 @@
   },
   "neo": {
     "name": "ネオ",
-    "pronoun": "僕",
+    "pronoun": "私",
     "base": {
       "hp": 44,
       "sp": 18,

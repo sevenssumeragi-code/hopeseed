@@ -1071,12 +1071,16 @@ function openShrine(goddess: "fire" | "water"): void {
 function openMemberSelect(enemyIds: string[], isBoss: boolean, bossId?: string): void {
   const active = gm.party.getActiveMembers();
   const enemyNames = enemyIds.map((id) => getEnemyDef(id).name).join("、");
-  battleMembers = [gm.gs.holder];
+  // 初期選択: 保持者＋保持者との信頼度上位（最大4人）。
+  // 保持者単独では防御/逃げるしかできず「操作不能」に見えるため（第4巻5-2-2の掟）
+  const others = active.filter((c) => c.id !== gm.gs.holder)
+    .sort((x, y) => gm.trust.pair(gm.gs.holder, y.id) - gm.trust.pair(gm.gs.holder, x.id));
+  battleMembers = [gm.gs.holder, ...others.slice(0, DB.config.BATTLE_MEMBERS_MAX - 1).map((c) => c.id)];
   const back = document.createElement("div");
   back.className = "modal-back";
   const memberBtns = active.map((c) => {
     const isHolder = c.id === gm.gs.holder;
-    return `<button class="small mem-btn ${isHolder ? "selected" : ""}" data-id="${c.id}">
+    return `<button class="small mem-btn ${battleMembers.includes(c.id) ? "selected" : ""}" data-id="${c.id}">
       ${isHolder ? "🌱" : ""}${DB.characters[c.id].name} Lv${c.level}</button>`;
   }).join(" ");
   back.innerHTML = `<div class="modal"><h2>⚔️ ${enemyNames}が現れた！</h2>
@@ -1139,6 +1143,10 @@ function renderBattle(): void {
     </div>`;
   }).join("");
 
+  // 戦闘中ミニログ（直近の出来事を戦場内に表示。下部ログと二重掲示で見落とし防止）
+  const recentLog = b.log.lines.slice(-4)
+    .map((l) => `<div class="battle-log-line">${l}</div>`).join("");
+
   // ターン順表示（第13巻16-4: 素早さ降順プレビュー）
   const order = [
     ...b.allies.filter((a) => !a.state.downed).map((a) => ({
@@ -1166,16 +1174,21 @@ function renderBattle(): void {
       const enabled = cmds.includes(c as any);
       return `<button class="small cmd-btn" data-cmd="${c}" ${enabled ? "" : "disabled"}>${names[c]}</button>`;
     }).join(" ");
+    // 保持者の掟の明示（たたかう/わざが灰色の理由。第0巻0-3-6）
+    if (isHolder) {
+      commandHtml += `<span style="font-size:12px;color:#9ab;margin-left:8px">🌱 保持者は掟により「たたかう」「わざ」を使えない（防御・庇う・アイテム・逃げるで戦おう）</span>`;
+    }
   }
 
   screen().innerHTML = `
     <div class="battle-wrap">
-      <div class="turn-order">ターン順: ${order}</div>
+      <div class="turn-order">ターン${b.turn + 1}　|　行動順: ${order}</div>
       <div class="battle-field">
         <div class="battle-side">${allyCards}</div>
         <div style="font-size:40px">⚔️</div>
         <div class="battle-side">${enemyCards}</div>
       </div>
+      <div class="battle-log-mini">${recentLog || "<div class=\"battle-log-line\">戦闘開始——コマンドを選ぼう</div>"}</div>
       <div class="battle-commands" id="battle-commands">${commandHtml}</div>
     </div>`;
 
@@ -1424,12 +1437,14 @@ function openNightRaidChoice(): void {
 
 function openNightRaidSelect(): void {
   const active = gm.party.getActiveMembers();
-  battleMembers = [gm.gs.holder];
+  const raidOthers = active.filter((c) => c.id !== gm.gs.holder)
+    .sort((x, y) => gm.trust.pair(gm.gs.holder, y.id) - gm.trust.pair(gm.gs.holder, x.id));
+  battleMembers = [gm.gs.holder, ...raidOthers.slice(0, DB.config.BATTLE_MEMBERS_MAX - 1).map((c) => c.id)];
   const back = document.createElement("div");
   back.className = "modal-back";
   const memberBtns = active.map((c) => {
     const isHolder = c.id === gm.gs.holder;
-    return `<button class="small mem-btn ${isHolder ? "selected" : ""}" data-id="${c.id}" ${isHolder ? "disabled" : ""}>
+    return `<button class="small mem-btn ${battleMembers.includes(c.id) ? "selected" : ""}" data-id="${c.id}" ${isHolder ? "disabled" : ""}>
       ${isHolder ? "🌱" : ""}${DB.characters[c.id].name} Lv${c.level}</button>`;
   }).join(" ");
   back.innerHTML = `<div class="modal"><h2>😈 悪魔の夜襲！</h2>
