@@ -29,6 +29,57 @@ const keys = new Set<string>();
 window.addEventListener("keydown", (e) => keys.add(e.key));
 window.addEventListener("keyup", (e) => keys.delete(e.key));
 
+// 戦闘・モーダルのキーボード操作:
+//  - 数字キー1〜9: 戦闘コマンド/対象/モーダル内の選択肢を選ぶ（ボタンに数字を表示）
+//  - Enter: 戦闘開始・迎え撃つ・挑む・就寝・モーダルを閉じる
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    for (const id of ["#battle-start", "#boss-start", "#raid-start", "#modal-close"]) {
+      const btn = document.querySelector(id) as HTMLElement | null;
+      if (btn) { btn.click(); e.preventDefault(); return; }
+    }
+    return;
+  }
+  const n = Number(e.key);
+  if (!Number.isInteger(n) || n < 1 || n > 9) return;
+  // 戦闘中: コマンド欄の有効なボタンを数字で選択
+  if (gm.phase === "battle" && !document.querySelector(".modal-back")) {
+    const bar = document.querySelector("#battle-commands");
+    if (bar) {
+      const btns = [...bar.querySelectorAll("button:not([disabled])")] as HTMLElement[];
+      if (btns[n - 1]) { btns[n - 1].click(); e.preventDefault(); }
+      return;
+    }
+  }
+  // モーダル（メンバー選択・夜襲の選択肢など）: 有効なボタンを数字で選択（マップ操作中は移動を優先）
+  if (gm.phase !== "map") {
+    const modal = document.querySelector(".modal-back:last-of-type .modal");
+    if (modal) {
+      const btns = [...modal.querySelectorAll("button:not([disabled])")] as HTMLElement[];
+      if (btns[n - 1]) { btns[n - 1].click(); e.preventDefault(); }
+    }
+  }
+});
+
+// ボタンに数字ショートカットを表示（戦闘コマンド欄・モーダル。再描画のたび自動付与）
+const hotkeyObserver = new MutationObserver(() => {
+  const areas = [
+    document.querySelector("#battle-commands"),
+    document.querySelector(".modal-back:last-of-type .modal"),
+  ];
+  for (const area of areas) {
+    if (!area) continue;
+    const btns = [...area.querySelectorAll("button:not([disabled])")] as HTMLElement[];
+    btns.forEach((b, i) => {
+      if (i < 9 && !b.dataset.hotkeyed) {
+        b.dataset.hotkeyed = String(i + 1);
+        b.innerHTML = `<span style="color:var(--accent)">${i + 1}</span> ${b.innerHTML}`;
+      }
+    });
+  }
+});
+hotkeyObserver.observe(document.body, { childList: true, subtree: true });
+
 function log(line: string, important = false): void {
   logBuffer.push(line);
   if (logBuffer.length > 200) logBuffer.shift();
@@ -906,7 +957,7 @@ function renderField(): void {
     if (fieldTick() === "drown") { handleFieldDrown(); return; }
     let dx = 0, dy = 0;
     const sp = 0.12;
-    if (keys.has("ArrowUp") || keys.has("w")) dy -= sp;
+    if (keys.has("ArrowUp") || keys.has("w") || keys.has("1")) dy -= sp; // 1=上移動（ユーザー指定）
     if (keys.has("ArrowDown") || keys.has("s")) dy += sp;
     if (keys.has("ArrowLeft") || keys.has("a")) dx -= sp;
     if (keys.has("ArrowRight") || keys.has("d")) dx += sp;
@@ -1025,7 +1076,7 @@ function renderFieldLoopResume(): void {
     if (fieldTick() === "drown") { handleFieldDrown(); return; }
     let dx = 0, dy = 0;
     const sp = 0.12;
-    if (keys.has("ArrowUp") || keys.has("w")) dy -= sp;
+    if (keys.has("ArrowUp") || keys.has("w") || keys.has("1")) dy -= sp; // 1=上移動（ユーザー指定）
     if (keys.has("ArrowDown") || keys.has("s")) dy += sp;
     if (keys.has("ArrowLeft") || keys.has("a")) dx -= sp;
     if (keys.has("ArrowRight") || keys.has("d")) dx += sp;
@@ -1085,6 +1136,7 @@ function openMemberSelect(enemyIds: string[], isBoss: boolean, bossId?: string):
   }).join(" ");
   back.innerHTML = `<div class="modal"><h2>⚔️ ${enemyNames}が現れた！</h2>
     <p>戦闘に参加するメンバーを選べ（最大${DB.config.BATTLE_MEMBERS_MAX}人・保持者の参加は任意）</p>
+    <p style="font-size:12px;color:#9ab">クリックで選択／Enterキーですぐ戦闘開始</p>
     <div class="row" style="margin-top:10px">${memberBtns}</div>
     <div class="modal-actions"><button id="battle-start">戦闘開始</button></div></div>`;
   document.body.appendChild(back);
@@ -1182,7 +1234,7 @@ function renderBattle(): void {
 
   screen().innerHTML = `
     <div class="battle-wrap">
-      <div class="turn-order">ターン${b.turn + 1}　|　行動順: ${order}</div>
+      <div class="turn-order">ターン${b.turn + 1}　|　行動順: ${order}　|　🖱クリック または 数字キーでコマンド選択</div>
       <div class="battle-field">
         <div class="battle-side">${allyCards}</div>
         <div style="font-size:40px">⚔️</div>
