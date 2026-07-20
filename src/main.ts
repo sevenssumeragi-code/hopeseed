@@ -61,24 +61,7 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// ボタンに数字ショートカットを表示（戦闘コマンド欄・モーダル。再描画のたび自動付与）
-const hotkeyObserver = new MutationObserver(() => {
-  const areas = [
-    document.querySelector("#battle-commands"),
-    document.querySelector(".modal-back:last-of-type .modal"),
-  ];
-  for (const area of areas) {
-    if (!area) continue;
-    const btns = [...area.querySelectorAll("button:not([disabled])")] as HTMLElement[];
-    btns.forEach((b, i) => {
-      if (i < 9 && !b.dataset.hotkeyed) {
-        b.dataset.hotkeyed = String(i + 1);
-        b.innerHTML = `<span style="color:var(--accent)">${i + 1}</span> ${b.innerHTML}`;
-      }
-    });
-  }
-});
-hotkeyObserver.observe(document.body, { childList: true, subtree: true });
+// （数字キー1〜9も隠しショートカットとして使えるが、既定はマウスクリック操作）
 
 function log(line: string, important = false): void {
   logBuffer.push(line);
@@ -652,7 +635,7 @@ function renderBase(): void {
         const targets = gm.party.getActiveMembers();
         const t = $("#med-target");
         t.innerHTML = `<div class="row" style="margin-top:8px">` +
-          targets.map((c) => `<button class="small mt-btn" data-id="${c.id}">${DB.characters[c.id].name}</button>`).join(" ") + "</div>";
+          targets.map((c) => `<button class="cmd-btn mt-btn" data-id="${c.id}">${DB.characters[c.id].name}</button>`).join(" ") + "</div>";
         t.querySelectorAll(".mt-btn").forEach((tb) => {
           (tb as HTMLElement).onclick = () => {
             const r = gm.useMedicine(medId, (tb as HTMLElement).dataset.id!);
@@ -1177,8 +1160,9 @@ function renderBattle(): void {
     const hpPct = Math.round((a.state.hp / a.state.maxHp) * 100);
     const spPct = Math.round((a.state.sp / a.state.maxSp) * 100);
     const betrayed = (a as any).betrayed ? " 😈裏切り" : "";
-    return `<div class="unit-card ${a.state.downed ? "downed" : ""} ${a.state.id === gm.gs.holder ? "holder" : ""}">
-      <div class="name">${d.name} Lv${a.state.level}${betrayed} ${statusBadges(a.state)}</div>
+    const isActive = actor && a.state.id === actor.state.id;
+    return `<div class="unit-card ${a.state.downed ? "downed" : ""} ${a.state.id === gm.gs.holder ? "holder" : ""} ${isActive ? "active" : ""}">
+      <div class="name">${isActive ? "▶ " : ""}${d.name} Lv${a.state.level}${betrayed} ${statusBadges(a.state)}</div>
       <div class="bar"><div class="bar-fill hp ${hpPct < 30 ? "low" : ""}" style="width:${hpPct}%"></div></div>
       <div style="font-size:11px">HP ${a.state.hp}/${a.state.maxHp}</div>
       <div class="bar"><div class="bar-fill sp" style="width:${spPct}%"></div></div>
@@ -1222,19 +1206,20 @@ function renderBattle(): void {
     const display: string[] = isHolder
       ? ["attack", "skill", ...cmds.filter((c) => c !== "attack" && c !== "skill")]
       : [...cmds];
-    commandHtml = `<b>${d.name}のコマンド:</b> ` + display.map((c) => {
+    const btns = display.map((c) => {
       const enabled = cmds.includes(c as any);
-      return `<button class="small cmd-btn" data-cmd="${c}" ${enabled ? "" : "disabled"}>${names[c]}</button>`;
-    }).join(" ");
+      return `<button class="cmd-btn" data-cmd="${c}" ${enabled ? "" : "disabled"}>${names[c]}</button>`;
+    }).join("");
     // 保持者の掟の明示（たたかう/わざが灰色の理由。第0巻0-3-6）
-    if (isHolder) {
-      commandHtml += `<span style="font-size:12px;color:#9ab;margin-left:8px">🌱 保持者は掟により「たたかう」「わざ」を使えない（防御・庇う・アイテム・逃げるで戦おう）</span>`;
-    }
+    const hint = isHolder
+      ? `<div class="cmd-hint">🌱 保持者は掟により「たたかう」「わざ」を使えない ― 防御・庇う・アイテム・逃げるで戦おう</div>`
+      : "";
+    commandHtml = `<div class="cmd-actor">▶ <b>${d.name}</b> のばん　<span class="cmd-sub">コマンドを選んでね</span></div>${hint}<div class="cmd-row">${btns}</div>`;
   }
 
   screen().innerHTML = `
     <div class="battle-wrap">
-      <div class="turn-order">ターン${b.turn + 1}　|　行動順: ${order}　|　🖱クリック または 数字キーでコマンド選択</div>
+      <div class="turn-order">ターン${b.turn + 1}　|　行動順: ${order}</div>
       <div class="battle-field">
         <div class="battle-side">${allyCards}</div>
         <div style="font-size:40px">⚔️</div>
@@ -1272,8 +1257,8 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
     case "tame": {
       const beasts = b.enemies.map((e, i) =>
         e.alive && !e.tamedTurns && e.def.family === "beast" && !e.def.boss
-          ? `<button class="small t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
-      cmdBar.innerHTML = `<b>どの獣を手なずける？</b> ${beasts} <button class="small" id="tm-back">戻る</button>`;
+          ? `<button class="cmd-btn t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
+      cmdBar.innerHTML = `<b>どの獣を手なずける？</b> ${beasts} <button class="cmd-btn cmd-back" id="tm-back">↩ 戻る</button>`;
       ($("#tm-back")).onclick = () => renderBattle();
       cmdBar.querySelectorAll(".t-btn").forEach((t) => {
         (t as HTMLElement).onclick = () =>
@@ -1283,8 +1268,8 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
     }
     case "persuade": {
       const betrayed = b.allies.filter((a) => (a as any).betrayed).map((a) =>
-        `<button class="small p-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
-      cmdBar.innerHTML = `<b>誰を説得する？</b> ${betrayed} <button class="small" id="ps-back">戻る</button>`;
+        `<button class="cmd-btn p-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
+      cmdBar.innerHTML = `<b>誰を説得する？</b> ${betrayed} <button class="cmd-btn cmd-back" id="ps-back">↩ 戻る</button>`;
       ($("#ps-back")).onclick = () => renderBattle();
       cmdBar.querySelectorAll(".p-btn").forEach((t) => {
         (t as HTMLElement).onclick = () =>
@@ -1294,7 +1279,7 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
     }
     case "attack": {
       const targets = b.enemies.map((e, i) => e.alive && !e.tamedTurns
-        ? `<button class="small t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
+        ? `<button class="cmd-btn t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
       cmdBar.innerHTML = `<b>どの敵を攻撃？</b> ${targets}`;
       cmdBar.querySelectorAll(".t-btn").forEach((t) => {
         (t as HTMLElement).onclick = () =>
@@ -1308,9 +1293,9 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
       const btns = learned.map(([sid, raw]) => {
         const s = enhancedSkill(raw, actor.level);
         const ok = actor.sp >= s.sp_cost;
-        return `<button class="small sk-btn" data-sid="${sid}" ${ok ? "" : "disabled"}>${s.name}（SP${s.sp_cost}）</button>`;
+        return `<button class="cmd-btn sk-btn" data-sid="${sid}" ${ok ? "" : "disabled"}>${s.name}（SP${s.sp_cost}）</button>`;
       }).join(" ");
-      cmdBar.innerHTML = `<b>どの技？</b> ${btns} <button class="small" id="sk-back">戻る</button>`;
+      cmdBar.innerHTML = `<b>どの技？</b> ${btns} <button class="cmd-btn cmd-back" id="sk-back">↩ 戻る</button>`;
       ($("#sk-back")).onclick = () => renderBattle();
       cmdBar.querySelectorAll(".sk-btn").forEach((t) => {
         (t as HTMLElement).onclick = () => {
@@ -1320,7 +1305,7 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
             pushAndNext({ kind, actorId: actor.id, skillId: sid });
           } else if ((s.kind === "support" || s.kind === "heal") && s.target === "ally_single") {
             const allies = b.allies.filter((a) => !a.state.downed).map((a) =>
-              `<button class="small at-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
+              `<button class="cmd-btn at-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
             cmdBar.innerHTML = `<b>誰に？</b> ${allies}`;
             cmdBar.querySelectorAll(".at-btn").forEach((ab) => {
               (ab as HTMLElement).onclick = () =>
@@ -1328,12 +1313,12 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
             });
           } else {
             const targets = b.enemies.map((e, i) => e.alive && !e.tamedTurns
-              ? `<button class="small t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
+              ? `<button class="cmd-btn t-btn" data-i="${i}">${e.def.name}</button>` : "").join(" ");
             // 光属性技は裏切り味方への浄化にも使える（第4巻5-9）
             const isLight = s.effects.some((e2) => e2.type === "anti_demon");
             const betrayedBtns = isLight
               ? b.allies.filter((a) => (a as any).betrayed).map((a) =>
-                `<button class="small bt-btn" data-id="${a.state.id}">✨${DB.characters[a.state.id].name}を浄化</button>`).join(" ")
+                `<button class="cmd-btn bt-btn" data-id="${a.state.id}">✨${DB.characters[a.state.id].name}を浄化</button>`).join(" ")
               : "";
             cmdBar.innerHTML = `<b>どの敵に？</b> ${targets} ${betrayedBtns}`;
             cmdBar.querySelectorAll(".t-btn").forEach((tb) => {
@@ -1353,8 +1338,8 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
       const others = b.allies.filter((a) => !a.state.downed && !(a as any).betrayed && a.state.id !== actor.id);
       // 対象ごとの成功率%をリアルタイム表示（第13巻16-4: 信頼度が数字で効く実感）
       const btns = others.map((a) =>
-        `<button class="small p-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}（${b.protectRatePreview(actor.id, a.state.id)}%）</button>`).join(" ");
-      cmdBar.innerHTML = `<b>誰を庇う？</b> ${btns} <button class="small" id="p-back">戻る</button>`;
+        `<button class="cmd-btn p-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}（${b.protectRatePreview(actor.id, a.state.id)}%）</button>`).join(" ");
+      cmdBar.innerHTML = `<b>誰を庇う？</b> ${btns} <button class="cmd-btn cmd-back" id="p-back">↩ 戻る</button>`;
       ($("#p-back")).onclick = () => renderBattle();
       cmdBar.querySelectorAll(".p-btn").forEach((t) => {
         (t as HTMLElement).onclick = () =>
@@ -1367,14 +1352,14 @@ function selectCommand(actor: CharacterState, kind: Command["kind"]): void {
         n > 0 && DB.items[id]?.category === "medicine" && !DB.items[id]?.field_only);
       if (usable.length === 0) { cmdBar.innerHTML += " <i>使えるものがない</i>"; return; }
       const btns = usable.map(([id, n]) =>
-        `<button class="small i-btn" data-id="${id}">${DB.items[id].name}×${n}</button>`).join(" ");
-      cmdBar.innerHTML = `<b>どれを使う？</b> ${btns} <button class="small" id="i-back">戻る</button>`;
+        `<button class="cmd-btn i-btn" data-id="${id}">${DB.items[id].name}×${n}</button>`).join(" ");
+      cmdBar.innerHTML = `<b>どれを使う？</b> ${btns} <button class="cmd-btn cmd-back" id="i-back">↩ 戻る</button>`;
       ($("#i-back")).onclick = () => renderBattle();
       cmdBar.querySelectorAll(".i-btn").forEach((t) => {
         (t as HTMLElement).onclick = () => {
           const itemId = (t as HTMLElement).dataset.id!;
           const allies = b.allies.filter((a) => !a.state.downed).map((a) =>
-            `<button class="small at-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
+            `<button class="cmd-btn at-btn" data-id="${a.state.id}">${DB.characters[a.state.id].name}</button>`).join(" ");
           cmdBar.innerHTML = `<b>誰に使う？</b> ${allies}`;
           cmdBar.querySelectorAll(".at-btn").forEach((ab) => {
             (ab as HTMLElement).onclick = () => {

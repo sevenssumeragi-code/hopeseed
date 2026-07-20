@@ -114,7 +114,8 @@ button.selected { border-color: var(--accent); background: #3a3020; }
 .battle-wrap { display: grid; grid-template-rows: auto 1fr auto auto; height: 100%; }
 .battle-field {
   display: flex; justify-content: space-around; align-items: center;
-  padding: 24px; background: linear-gradient(180deg, #16202c 0%, #0e141c 100%);
+  padding: 16px 24px; background: linear-gradient(180deg, #16202c 0%, #0e141c 100%);
+  min-height: 0; overflow-y: auto;   /* カードが多くても縮み、コマンド欄を最下部に固定 */
 }
 .battle-side { display: flex; flex-direction: column; gap: 10px; }
 .unit-card {
@@ -131,9 +132,43 @@ button.selected { border-color: var(--accent); background: #3a3020; }
 .bar-fill.hp.low { background: var(--danger); }
 .bar-fill.sp { background: var(--sp); }
 .battle-commands {
-  display: flex; gap: 8px; padding: 12px 16px; background: var(--panel);
-  border-top: 2px solid var(--border); flex-wrap: wrap; align-items: center;
+  padding: 10px 16px 14px; background: var(--panel);
+  border-top: 3px solid var(--accent);
 }
+/* 手番キャラ表示 */
+.cmd-actor { font-size: 17px; color: var(--accent); margin-bottom: 6px; }
+.cmd-actor b { font-size: 19px; }
+.cmd-sub { font-size: 13px; color: #9ab; }
+.cmd-hint {
+  font-size: 12px; color: #bcd; margin-bottom: 8px;
+  background: rgba(232,184,74,0.08); border-left: 3px solid var(--accent);
+  padding: 4px 10px; border-radius: 3px;
+}
+/* 大きなコマンドボタン（クリックしやすいサイズ） */
+.cmd-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+.cmd-btn {
+  min-width: 128px; padding: 14px 20px; font-size: 16px; font-weight: bold;
+  background: var(--panel-light); color: var(--text);
+  border: 2px solid var(--border); border-radius: 8px; cursor: pointer;
+  transition: all .1s; font-family: inherit;
+}
+.cmd-btn:hover:not(:disabled) {
+  border-color: var(--accent); background: #3a3020;
+  transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.cmd-btn:active:not(:disabled) { transform: translateY(0); }
+.cmd-btn:disabled { opacity: 0.3; cursor: default; }
+.cmd-btn.cmd-back { min-width: 0; background: var(--panel); font-weight: normal; }
+/* サブ選択（対象・技・アイテム）の見出しと横並び */
+.battle-commands > b { display: block; font-size: 16px; color: var(--accent); margin-bottom: 10px; }
+.battle-commands > .cmd-btn { margin: 0 10px 10px 0; }
+
+/* 手番キャラのカードを強調 */
+.unit-card.active {
+  border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent), 0 0 16px rgba(232,184,74,0.4);
+  animation: active-pulse 1.2s ease-in-out infinite;
+}
+@keyframes active-pulse { 50% { box-shadow: 0 0 0 2px var(--accent), 0 0 24px rgba(232,184,74,0.7); } }
 
 /* 戦闘中ミニログ（コマンド欄の直上・見落とし防止） */
 .battle-log-mini {
